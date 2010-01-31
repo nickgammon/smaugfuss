@@ -1,0 +1,24 @@
+.*
+!.gitignore
+
+#
+# Object files directory
+#
+o/
+
+#
+#  Executables
+#
+resolver
+smaug
+
+#
+# Local object files
+#
+*.o
+
+#
+#  Dependencies
+#
+*.d
+
