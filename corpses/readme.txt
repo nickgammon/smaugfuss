@@ -1,0 +1,2 @@
+Corpses are stored here.
+
