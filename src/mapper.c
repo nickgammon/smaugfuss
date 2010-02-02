@@ -55,8 +55,6 @@
 #include "mud.h"
 #include "mapper.h"
 
-bool check_blind( CHAR_DATA * ch );
-
 /* The map itself */
 MAP_TYPE dmap[MAPX + 1][MAPY + 1];
 

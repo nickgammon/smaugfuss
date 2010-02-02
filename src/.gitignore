@@ -22,3 +22,9 @@ smaug
 #
 *.d
 
+
+#
+# vi tags file
+# 
+tags
+

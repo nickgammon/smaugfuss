@@ -35,7 +35,6 @@ bool check_parse_name( const char *name, bool newchar );
 void show_char_to_char_0( CHAR_DATA * victim, CHAR_DATA * ch );
 void show_char_to_char_1( CHAR_DATA * victim, CHAR_DATA * ch );
 void show_char_to_char( CHAR_DATA * list, CHAR_DATA * ch );
-bool check_blind( CHAR_DATA * ch );
 void show_condition( CHAR_DATA * ch, CHAR_DATA * victim );
 
 /*

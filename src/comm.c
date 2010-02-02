@@ -64,6 +64,8 @@ void shutdown_checkpoint( void );
 #include <netdb.h>
 #endif
 
+#define  MUD_SPECIFIC       '\x66'
+
 #ifdef IMC
 void imc_delete_info( void );
 void free_imcdata( bool complete );
@@ -92,6 +94,7 @@ void free_all_reserved( void );
 const char echo_off_str[] = { ( char )IAC, ( char )WILL, TELOPT_ECHO, '\0' };
 const char echo_on_str[] = { ( char )IAC, ( char )WONT, TELOPT_ECHO, '\0' };
 const char go_ahead_str[] = { ( char )IAC, ( char )GA, '\0' };
+const char want_server_status[] = { ( char )IAC, ( char )WILL, MUD_SPECIFIC, '\0' };
 
 void save_sysdata( SYSTEM_DATA sys );
 
@@ -1037,6 +1040,7 @@ void new_descriptor( int new_desc )
    dnew->ifd = -1;   /* Descriptor pipes, used for DNS resolution and such */
    dnew->ipid = -1;
    dnew->can_compress = FALSE;
+   dnew->want_server_status = false;
    CREATE( dnew->mccp, MCCP, 1 );
 
    CREATE( dnew->outbuf, char, dnew->outsize );
@@ -1085,6 +1089,11 @@ void new_descriptor( int new_desc )
     */
    write_to_buffer( dnew, will_compress2_str, 0 );
 
+   /*
+    * extra MUD status
+    */
+   write_to_buffer( dnew, want_server_status, 0 );
+    
    /*
     * Send the greeting.
     */
@@ -1402,6 +1411,16 @@ void read_from_buffer( DESCRIPTOR_DATA * d )
             else if( d->inbuf[i - 1] == ( signed char )DONT )
                compressEnd( d );
          }
+         else if( d->inbuf[i] == ( signed char )MUD_SPECIFIC )
+         {
+            if( d->inbuf[i - 1] == ( signed char )DO )
+               {
+               d->want_server_status = true;
+               write_to_descriptor(d, "\xFF\xFA\x66tt=\"version\";version=1.0;\xFF\xF0", 0);
+               }
+            else if( d->inbuf[i - 1] == ( signed char )DONT )
+               d->want_server_status = false;
+         }
       }
       else if( d->inbuf[i] == '\b' && k > 0 )
          --k;
@@ -1521,6 +1540,12 @@ bool flush_buffer( DESCRIPTOR_DATA * d, bool fPrompt )
          write_to_buffer( d, go_ahead_str, 0 );
    }
 
+   /* 
+    * Status as a telnet message
+    */
+    
+   show_status (d->character);
+     
    /*
     * Short-circuit if nothing to write.
     */
@@ -3730,6 +3755,81 @@ void display_prompt( DESCRIPTOR_DATA * d )
    send_to_char( buf, ch );
    return;
 }
+
+void show_status( CHAR_DATA *ch )
+{
+  
+   if (WANT_TELNET_INFO (ch))
+     {     
+     CHAR_DATA * victim = NULL;
+     
+     if (ch->fighting)
+       victim = ch->fighting->who;
+      
+     char buf[MAX_STRING_LENGTH];
+     snprintf(buf, sizeof (buf), 
+               "\xFF\xFA\x66"         // IAC SB 102
+               "tt=\"status\";"       // transaction type: status
+               "hp=%d;maxhp=%d;"      // hp points
+               "mana=%d;maxmana=%d;"  // mana 
+               "move=%d;maxmove=%d;"  // movement
+               "xp=%d;maxxp=%d;"      // experience
+               "gold=%i;"             // gold
+               "level=%d;"            // level
+               "combat=%s;"           // in combat or not
+               "dead=%s;"             // dead?
+               "poisoned=%s;",        // poisoned?
+               ch->hit,
+               ch->max_hit,
+               IS_VAMPIRE( ch ) ? 0 : ch->mana,
+               IS_VAMPIRE( ch ) ? 0 : ch->max_mana,
+               ch->move,
+               ch->max_move,
+               ch->exp,
+               exp_level( ch, ch->level + 1 ) - ch->exp,
+               ch->gold,
+               ch->level,
+               (ch->fighting && ch->fighting->who) ? "true" : "false",
+               TRUE_OR_FALSE (char_died( ch )),
+               TRUE_OR_FALSE (IS_AFFECTED( ch, AFF_POISON ))
+               );
+  
+      // combat info
+      if (victim)
+        {
+         const char * p = "You";
+         char * pName;
+         
+         if (ch != victim)
+           {
+           if (IS_NPC( victim ) )
+             p = victim->short_descr;
+           else
+             p = victim->name;
+           }
+      
+         pName = fixup_lua_strings (p);
+         
+         snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
+                 "victim={name=%s;" // name
+                 "hp=%d;maxhp=%d;"      // hp points
+                 "level=%d;"            // level
+                 "};",
+                 pName,
+                 victim->hit,
+                 victim->max_hit,
+                 victim->level
+               );
+         free (pName); 
+       }
+                   
+     // finish telnet negotiation after the combat info
+     strncpy(&buf [strlen (buf)], "\xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
+               
+     send_to_char( buf, ch );
+   }
+  
+} 
 
 void set_pager_input( DESCRIPTOR_DATA * d, char *argument )
 {

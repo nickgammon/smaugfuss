@@ -1279,6 +1279,7 @@ void char_update( void )
          else if( ch == ch_save && IS_SET( sysdata.save_flags, SV_AUTO ) && ++save_count < 10 ) /* save max of 10 per tick */
             save_char_obj( ch );
       }
+      show_status (ch);
    }
    trworld_dispose( &lc );
 }

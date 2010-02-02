@@ -802,6 +802,7 @@ struct descriptor_data
    unsigned char prevcolor;
    int ifd;
    pid_t ipid;
+   bool want_server_status;
 };
 
 /*
@@ -3235,7 +3236,14 @@ do								\
 #define HAS_BODYPART(ch, part)	((ch)->xflags == 0 || IS_SET((ch)->xflags, (part)))
 #define GET_TIME_PLAYED(ch)     (((ch)->played + (current_time - (ch)->logon)) / 3600)
 #define CAN_CAST(ch)		((ch)->Class != 2 && (ch)->Class != 3)
-
+#define WANT_TELNET_INFO(ch) \
+  (ch != NULL && \
+   !IS_NPC(ch) && \
+   !mud_down && \
+   ch->desc != NULL && \
+   ch->desc->connected == CON_PLAYING && \
+   ch->desc->want_server_status)
+#define TRUE_OR_FALSE(arg) ((arg) ? "true" : "false")
 #define IS_VAMPIRE(ch)		(!IS_NPC(ch)				    \
 				&& ((ch)->race==RACE_VAMPIRE		    \
 				||  (ch)->Class==CLASS_VAMPIRE))
@@ -4320,6 +4328,7 @@ char *format_obj_to_char( OBJ_DATA * obj, CHAR_DATA * ch, bool fShort );
 void show_list_to_char( OBJ_DATA * list, CHAR_DATA * ch, bool fShort, bool fShowNothing );
 bool is_ignoring( CHAR_DATA * ch, CHAR_DATA * ign_ch );
 void show_race_line( CHAR_DATA * ch, CHAR_DATA * victim );
+bool check_blind( CHAR_DATA * ch );
 
 /* act_move.c */
 void clear_vrooms args( ( void ) );
@@ -4439,6 +4448,7 @@ void pager_printf( CHAR_DATA * ch, const char *fmt, ... ) __attribute__ ( ( form
 void pager_printf_color( CHAR_DATA * ch, const char *fmt, ... ) __attribute__ ( ( format( printf, 2, 3 ) ) );
 void act( short AType, const char *format, CHAR_DATA * ch, const void *arg1, const void *arg2, int type );
 const char *myobj( OBJ_DATA * obj );
+void show_status( CHAR_DATA *ch );
 
 /* reset.c */
 RD *make_reset( char letter, int extra, int arg1, int arg2, int arg3 );
@@ -4665,6 +4675,7 @@ int fread_imm_host( FILE * fp, IMMORTAL_HOST * data );
 void do_write_imm_host( void );
 
 /* handler.c */
+char * fixup_lua_strings (const char * sce);
 void free_obj( OBJ_DATA * obj );
 CHAR_DATA *carried_by( OBJ_DATA * obj );
 AREA_DATA *get_area_obj( OBJ_INDEX_DATA * obj );

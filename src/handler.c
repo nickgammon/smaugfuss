@@ -49,6 +49,96 @@ void delete_reset( RESET_DATA * pReset );
 int trw_loops = 0;
 TRV_WORLD trw_heap[TRW_MAXHEAP];
 
+// Author: Nick Gammon; 2nd February 2010
+// Fixup for sending Lua-style strings to client
+// Convert: \r \n double-quote IAC and ESC
+// Note that Lua expects 0x00 to be sent as \0 however since this is a
+// null-terminated string, we won't ever get 0x00
+// Also puts quotes around result to save you the trouble of doing it.
+
+char * fixup_lua_strings (const char * sce)
+  {
+  const char * p;
+  char * dest;
+  char * pd;
+  int count = 3;  // allow for quotes and final 0x00 at end
+  unsigned char c;
+
+  // first work out how much memory to allocate
+  if (sce)
+    {
+    for (p = sce; *p; p++, count++)
+      {
+      c = (unsigned char) *p;
+      switch (c)
+        {
+        case '\r':   // carriage-return
+        case '\n':   // newline
+        case '"':    // double-quote
+          count++;   // becomes \r \n and \"
+          break;   
+        
+        case '\x1B':  // ESC becomes \027
+        case '\xFF':  // IAC becomes \255
+          count += 3;  
+          break;
+        
+       } /* end of switch on character */
+  
+      }   /* end of counting */
+   }  // if sce not NULL
+  
+  dest = (char *) malloc (count);
+  pd = dest;
+  *pd++ = '"';  // opening quote
+  
+  if (sce)
+    {
+    for (p = sce; *p; p++)
+      {
+      c = (unsigned char) *p;
+      switch (c)
+        {
+        case '\r':   // carriage-return
+          memcpy (pd, "\\r", 2);
+          pd += 2;
+          break;
+           
+        case '\n':   // newline
+          memcpy (pd, "\\n", 2);
+          pd += 2;
+          break;
+          
+        case '"':    // double-quote
+          memcpy (pd, "\\\"", 2);
+          pd += 2;
+          break;
+        
+        case '\x1B': // ESC
+          memcpy (pd, "\\027", 4);
+          pd += 4;
+          break;
+          
+        case '\xFF': // IAC
+          memcpy (pd, "\\255", 4);
+          pd += 4;
+          break;
+        
+        default:
+          *pd++ = c;
+           break;  
+  
+        } /* end of switch on character */
+  
+       }   /* end of copying */
+    }  // if sce not NULL    
+  
+  *pd++ = '"';  // closing quote
+  *pd = 0;      // terminating 0x00
+  
+  return dest;
+}
+
 TRV_DATA *trvch_create( CHAR_DATA * ch, trv_type tp )
 {
    CHAR_DATA *first, *ptr;
@@ -1780,6 +1870,65 @@ void char_to_room( CHAR_DATA * ch, ROOM_INDEX_DATA * pRoomIndex )
    if( ( obj = get_eq_char( ch, WEAR_LIGHT ) ) != NULL && obj->item_type == ITEM_LIGHT && obj->value[2] != 0 )
       ++pRoomIndex->light;
 
+   if (WANT_TELNET_INFO (ch))
+     {     
+     char buf[MAX_STRING_LENGTH];
+     bool blind = !check_blind( ch );  // true is NOT blind
+     bool dark = !xIS_SET( ch->act, PLR_HOLYLIGHT ) && 
+                 !IS_AFFECTED( ch, AFF_TRUESIGHT ) && 
+                 !IS_AFFECTED( ch, AFF_INFRARED ) && 
+                 room_is_dark( ch->in_room );
+     
+     snprintf(buf, sizeof (buf), 
+               "\xFF\xFA\x66"         // IAC SB 102
+               "tt=\"move\";"         // transaction type: move
+               "blind=%s;"            // character blind?
+               "dark=%s;",            // room dark?
+               TRUE_OR_FALSE (blind),
+               TRUE_OR_FALSE (dark)
+               );
+     
+     // show exits if they are not blinded and it is not dark
+     if (! (blind || dark))
+       {
+       char * pName = fixup_lua_strings (ch->in_room->name);
+       EXIT_DATA *pexit;
+    
+       // if not blind or dark show them room name and vnum   
+       snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
+               "room=%d;name=%s;", // vnum, name
+               ch->in_room->vnum,
+               pName
+             );
+       free (pName); 
+       
+       strncpy(&buf [strlen (buf)], "exits={", sizeof (buf) - strlen (buf)); 
+           
+        for( pexit = ch->in_room->first_exit; pexit; pexit = pexit->next )
+         {
+            if( pexit->to_room
+                && !IS_SET( pexit->exit_info, EX_CLOSED )
+                && ( !IS_SET( pexit->exit_info, EX_WINDOW )
+                     || IS_SET( pexit->exit_info, EX_ISDOOR ) ) && !IS_SET( pexit->exit_info, EX_HIDDEN ) )
+            {
+             // WARNING - I assume dir_name gives names that are valid Lua names (which it currently does)
+             //  if not you would need to use fixup_lua_strings and do something like: "[%s]=%i;"
+             snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
+               "%s=%i;",          // north=12345
+               dir_name[pexit->vdir],
+               pexit->vnum
+               );
+            }
+         }  // end for each exit        
+       strncpy(&buf [strlen (buf)], "};",  sizeof (buf) - strlen (buf)); 
+       }  // if not blind or dark
+ 
+     // finish telnet negotiation after the exits
+     strncpy(&buf [strlen (buf)], "\xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
+     
+     send_to_char( buf, ch );
+   }
+      
    /*
     * Add the room's affects to the char.
     * Even if the char died, we must do this, because the char
