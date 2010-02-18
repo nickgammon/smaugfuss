@@ -1416,7 +1416,14 @@ void read_from_buffer( DESCRIPTOR_DATA * d )
             if( d->inbuf[i - 1] == ( signed char )DO )
                {
                d->want_server_status = true;
-               write_to_descriptor(d, "\xFF\xFA\x66tt=\"version\";version=1.0;\xFF\xF0", 0);
+               write_to_descriptor(d, "\xFF\xFA\x66 tt=\"version\";version=1.0;\xFF\xF0", 0);
+               // define bar colours
+               write_to_descriptor(d, "\xFF\xFA\x66 bar={"
+                                      "HP={clr=\"darkgreen\"};"     // hp
+                                      "Mana={clr=\"mediumblue\"};"  // mana 
+                                      "Move={clr=\"gold\"};"        // movement
+                                      "};"                          // end bar
+                                      "\xFF\xF0", 0);
                }
             else if( d->inbuf[i - 1] == ( signed char )DONT )
                d->want_server_status = false;
@@ -3759,77 +3766,135 @@ void display_prompt( DESCRIPTOR_DATA * d )
 void show_status( CHAR_DATA *ch )
 {
   
-   if (WANT_TELNET_INFO (ch))
-     {     
-     CHAR_DATA * victim = NULL;
+   if (!WANT_TELNET_INFO (ch))
+     return;
+   
+ // group?
+  
+  CHAR_DATA *gch;
+  int iCount = 0;
+
+  char group [MAX_STRING_LENGTH] = "";
+
+  // brute-force approach
+  for( gch = first_char; gch; gch = gch->next )
+  {
+     if (gch == ch || is_same_group( gch, ch ) )
+     {
+       
      
-     if (ch->fighting)
-       victim = ch->fighting->who;
-      
-     char buf[MAX_STRING_LENGTH];
-     snprintf(buf, sizeof (buf), 
-               "\xFF\xFA\x66"         // IAC SB 102
-               "tt=\"status\";"       // transaction type: status
-               "hp=%d;maxhp=%d;"      // hp points
-               "mana=%d;maxmana=%d;"  // mana 
-               "move=%d;maxmove=%d;"  // movement
-               "xp=%d;maxxp=%d;"      // experience
-               "gold=%i;"             // gold
+     char * pName = fixup_lua_strings (IS_NPC( gch ) ? gch->short_descr : gch->name);
+       
+     iCount++;       
+       snprintf(&group [strlen (group)], sizeof (group) - strlen (group), 
+               "[%i]={"               // ith member
+               "name=%s;"             // group member name
+               "me=%s;"               // is this me?
+               "stats={"                // status bar info
+               "HP={cur=%d;max=%d};"      // hp points
+               "Mana={cur=%d;max=%d};"    // mana 
+               "Move={cur=%d;max=%d};"    // movement
+               "};"                   // end bar table
+               "xp={cur=%d;max=%d};"  // experience
                "level=%d;"            // level
                "combat=%s;"           // in combat or not
                "dead=%s;"             // dead?
-               "poisoned=%s;",        // poisoned?
-               ch->hit,
-               ch->max_hit,
-               IS_VAMPIRE( ch ) ? 0 : ch->mana,
-               IS_VAMPIRE( ch ) ? 0 : ch->max_mana,
-               ch->move,
-               ch->max_move,
-               ch->exp,
-               exp_level( ch, ch->level + 1 ) - ch->exp,
-               ch->gold,
-               ch->level,
-               (ch->fighting && ch->fighting->who) ? "true" : "false",
-               TRUE_OR_FALSE (char_died( ch )),
-               TRUE_OR_FALSE (IS_AFFECTED( ch, AFF_POISON ))
+               "poisoned=%s;};",      // poisoned?
+               iCount,
+               pName,
+               TRUE_OR_FALSE (gch == ch),
+               gch->hit,
+               gch->max_hit,
+               IS_VAMPIRE( gch ) ? 0 : gch->mana,
+               IS_VAMPIRE( gch ) ? 0 : gch->max_mana,
+               gch->move,
+               gch->max_move,
+               gch->exp,
+               exp_level( gch, gch->level + 1 ),
+               gch->level,
+               (gch->fighting && gch->fighting->who) ? "true" : "false",
+               TRUE_OR_FALSE (char_died( gch )),
+               TRUE_OR_FALSE (IS_AFFECTED( gch, AFF_POISON ))
                );
-  
-      // combat info
-      if (victim)
-        {
-         const char * p = "You";
-         char * pName;
-         
-         if (ch != victim)
-           {
-           if (IS_NPC( victim ) )
-             p = victim->short_descr;
-           else
-             p = victim->name;
-           }
+      free (pName); 
+       
+      if( gch->first_affect )
+       {
+       AFFECT_DATA *paf;
+       SKILLTYPE *sktmp;
+       char * pAffectName;
       
-         pName = fixup_lua_strings (p);
+       strncpy(&group [strlen (group)], "buffs={", sizeof (group) - strlen (group)); 
+       for( paf = gch->first_affect; paf; paf = paf->next )
+         {
+         sktmp = get_skilltype( paf->type );
+         if (sktmp)
+            {
+            pAffectName = fixup_lua_strings (sktmp->name);
+            
+            snprintf(&group [strlen (group)], sizeof (group) - strlen (group), 
+                 "%s;", pAffectName);
+                           
+            free (pAffectName); 
+           }
+           
+         } // end for loop
+       strncpy(&group [strlen (group)], "};", sizeof (group) - strlen (group)); 
+       }  // end if any affects
+              
+     }  // end of in our group
+  }  // end of for loop
+       
+   CHAR_DATA * victim = NULL;
+   
+   if (ch->fighting)
+     victim = ch->fighting->who;
+    
+   char buf[MAX_STRING_LENGTH];
+   snprintf(buf, sizeof (buf), 
+             "\xFF\xFA\x66"         // IAC SB 102
+             "group={%s};",          // group members
+             group
+             );
          
-         snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
-                 "victim={name=%s;" // name
-                 "hp=%d;maxhp=%d;"      // hp points
-                 "level=%d;"            // level
-                 "};",
-                 pName,
-                 victim->hit,
-                 victim->max_hit,
-                 victim->level
-               );
-         free (pName); 
-       }
-                   
-     // finish telnet negotiation after the combat info
-     strncpy(&buf [strlen (buf)], "\xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
-               
-     send_to_char( buf, ch );
-   }
-  
-} 
+             
+    // combat info
+    if (victim)
+      {
+       const char * p = "You";
+       char * pName;
+       
+       if (ch != victim)
+         {
+         if (IS_NPC( victim ) )
+           p = victim->short_descr;
+         else
+           p = victim->name;
+         }
+    
+       pName = fixup_lua_strings (p);
+       
+       snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
+               "victim={name=%s;" // name
+               "bar={"                // status bar info
+               "HP={cur=%d;max=%d};"      // hp points
+               "};"                   // end bar table
+               "level=%d;"            // level
+               "};",
+               pName,
+               victim->hit,
+               victim->max_hit,
+               victim->level
+             );
+       free (pName); 
+     }
+                 
+   // finish telnet negotiation after the combat info
+   strncpy(&buf [strlen (buf)], "\xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
+             
+   send_to_char( buf, ch );
+           
+}  // end of show_status
 
 void set_pager_input( DESCRIPTOR_DATA * d, char *argument )
 {
