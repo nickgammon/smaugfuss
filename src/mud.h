@@ -4329,6 +4329,7 @@ void show_list_to_char( OBJ_DATA * list, CHAR_DATA * ch, bool fShort, bool fShow
 bool is_ignoring( CHAR_DATA * ch, CHAR_DATA * ign_ch );
 void show_race_line( CHAR_DATA * ch, CHAR_DATA * victim );
 bool check_blind( CHAR_DATA * ch );
+void send_inroom_info ( CHAR_DATA* ch);
 
 /* act_move.c */
 void clear_vrooms args( ( void ) );

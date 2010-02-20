@@ -55,6 +55,13 @@ TRV_WORLD trw_heap[TRW_MAXHEAP];
 // Note that Lua expects 0x00 to be sent as \0 however since this is a
 // null-terminated string, we won't ever get 0x00
 // Also puts quotes around result to save you the trouble of doing it.
+// A NULL string returns the string "nil".
+
+// Handles conversion to UFF-8 if UTF8_ENCODE defined
+// You would normally define this unless the MUD already uses UTF-8 internally.
+// http://www.codeguru.com/cpp/misc/misc/multi-lingualsupport/article.php/c10451
+
+#define UTF8_ENCODE
 
 char * fixup_lua_strings (const char * sce)
   {
@@ -63,13 +70,23 @@ char * fixup_lua_strings (const char * sce)
   char * pd;
   int count = 3;  // allow for quotes and final 0x00 at end
   unsigned char c;
+  
+  if (sce == NULL)
+    {
+    dest = (char *) malloc (strlen ("nil") + 1);
+    strcpy (dest, "nil");  
+    return dest;
+    }
 
   // first work out how much memory to allocate
-  if (sce)
+  for (p = sce; *p; p++, count++)
     {
-    for (p = sce; *p; p++, count++)
-      {
-      c = (unsigned char) *p;
+    c = (unsigned char) *p;
+#ifdef UTF8_ENCODE
+    if (c >= 0x80)
+      count++;   // characters 0x80 to 0xFF require 110 000xx 10 xxxxxx
+    else
+#endif
       switch (c)
         {
         case '\r':   // carriage-return
@@ -78,60 +95,60 @@ char * fixup_lua_strings (const char * sce)
           count++;   // becomes \r \n and \"
           break;   
         
-        case '\x1B':  // ESC becomes \027
+        // Note: will not apply if UTF-8 encoding present
         case '\xFF':  // IAC becomes \255
           count += 3;  
           break;
         
        } /* end of switch on character */
-  
-      }   /* end of counting */
-   }  // if sce not NULL
+
+    }   /* end of counting */
   
   dest = (char *) malloc (count);
   pd = dest;
   *pd++ = '"';  // opening quote
   
-  if (sce)
+  for (p = sce; *p; p++)
     {
-    for (p = sce; *p; p++)
+    c = (unsigned char) *p;
+#ifdef UTF8_ENCODE
+    if (c >= 0x80)  // characters 0x80 to 0xFF require 110 000xx 10 xxxxxx
       {
-      c = (unsigned char) *p;
-      switch (c)
-        {
-        case '\r':   // carriage-return
-          memcpy (pd, "\\r", 2);
-          pd += 2;
-          break;
-           
-        case '\n':   // newline
-          memcpy (pd, "\\n", 2);
-          pd += 2;
-          break;
-          
-        case '"':    // double-quote
-          memcpy (pd, "\\\"", 2);
-          pd += 2;
-          break;
+      *pd++ = 0xC0 | (c >> 6);   // 110 000xx
+      *pd++ = 0x80 | (c & 0x3F); // 10 xxxxxx
+      }
+    else
+#endif
+    switch (c)
+      {
+      case '\r':   // carriage-return
+        memcpy (pd, "\\r", 2);
+        pd += 2;
+        break;
+         
+      case '\n':   // newline
+        memcpy (pd, "\\n", 2);
+        pd += 2;
+        break;
         
-        case '\x1B': // ESC
-          memcpy (pd, "\\027", 4);
-          pd += 4;
-          break;
-          
-        case '\xFF': // IAC
-          memcpy (pd, "\\255", 4);
-          pd += 4;
-          break;
-        
-        default:
-          *pd++ = c;
-           break;  
-  
-        } /* end of switch on character */
-  
-       }   /* end of copying */
-    }  // if sce not NULL    
+      case '"':    // double-quote
+        memcpy (pd, "\\\"", 2);
+        pd += 2;
+        break;
+      
+      // Note: will not apply if UTF-8 encoding present
+      case '\xFF': // IAC
+        memcpy (pd, "\\255", 4);
+        pd += 4;
+        break;
+      
+      default:
+        *pd++ = c;
+         break;  
+
+      } /* end of switch on character */
+
+     }   /* end of copying */
   
   *pd++ = '"';  // closing quote
   *pd = 0;      // terminating 0x00
@@ -1782,6 +1799,8 @@ void update_aris( CHAR_DATA * ch )
  */
 void char_from_room( CHAR_DATA * ch )
 {
+   ROOM_INDEX_DATA * pRoomIndex = ch->in_room;
+  
    OBJ_DATA *obj;
    AFFECT_DATA *paf;
 
@@ -1831,6 +1850,11 @@ void char_from_room( CHAR_DATA * ch )
    if( !IS_NPC( ch ) && get_timer( ch, TIMER_SHOVEDRAG ) > 0 )
       remove_timer( ch, TIMER_SHOVEDRAG );
 
+   // notify characters in room
+   CHAR_DATA *rch; 
+   for (rch = pRoomIndex->first_person; rch; rch = rch->next_in_room)
+     send_inroom_info (rch);
+      
    return;
 }
 
@@ -1881,7 +1905,7 @@ void char_to_room( CHAR_DATA * ch, ROOM_INDEX_DATA * pRoomIndex )
      
      snprintf(buf, sizeof (buf), 
                "\xFF\xFA\x66"         // IAC SB 102
-               "tt=\"move\";"         // transaction type: move
+               "move={"               // move table
                "blind=%s;"            // character blind?
                "dark=%s;",            // room dark?
                TRUE_OR_FALSE (blind),
@@ -1924,7 +1948,7 @@ void char_to_room( CHAR_DATA * ch, ROOM_INDEX_DATA * pRoomIndex )
        }  // if not blind or dark
  
      // finish telnet negotiation after the exits
-     strncpy(&buf [strlen (buf)], "\xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
+     strncpy(&buf [strlen (buf)], "} \xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
      
      send_to_char( buf, ch );
    }
@@ -1978,6 +2002,12 @@ void char_to_room( CHAR_DATA * ch, ROOM_INDEX_DATA * pRoomIndex )
    }
    if( !ch->was_in_room )
       ch->was_in_room = ch->in_room;
+      
+   // notify characters in room
+   CHAR_DATA *rch; 
+   for (rch = pRoomIndex->first_person; rch; rch = rch->next_in_room)
+     send_inroom_info (rch);
+      
    return;
 }
 
@@ -2355,6 +2385,12 @@ void obj_from_room( OBJ_DATA * obj )
    obj->in_room = NULL;
    if( obj->pIndexData->vnum == OBJ_VNUM_CORPSE_PC && falling < 1 )
       write_corpses( NULL, obj->short_descr + 14, obj );
+      
+   // notify characters in room
+   CHAR_DATA *rch; 
+   for (rch = in_room->first_person; rch; rch = rch->next_in_room)
+     send_inroom_info (rch);
+      
    return;
 }
 
@@ -2393,7 +2429,13 @@ OBJ_DATA *obj_to_room( OBJ_DATA * obj, ROOM_INDEX_DATA * pRoomIndex )
    obj_fall( obj, FALSE );
    falling--;
    if( obj->pIndexData->vnum == OBJ_VNUM_CORPSE_PC && falling < 1 )
-      write_corpses( NULL, obj->short_descr + 14, NULL );
+      write_corpses( NULL, obj->short_descr + 14, NULL );    
+      
+   // notify characters in room
+   CHAR_DATA *rch; 
+   for (rch = pRoomIndex->first_person; rch; rch = rch->next_in_room)
+     send_inroom_info (rch);
+        
    return obj;
 }
 

@@ -1285,6 +1285,7 @@ void do_look( CHAR_DATA * ch, const char *argument )
 
       show_list_to_char( ch->in_room->first_content, ch, FALSE, FALSE );
       show_char_to_char( ch->in_room->first_person, ch );
+      send_inroom_info (ch);
       return;
    }
 
@@ -5068,3 +5069,146 @@ void do_version( CHAR_DATA* ch, const char* argument)
 
    return;
 }
+
+void send_inroom_info ( CHAR_DATA* ch)
+{
+  
+   if (!WANT_TELNET_INFO (ch))
+     return;
+     
+   char buf[MAX_STRING_LENGTH];
+   bool blind = !check_blind( ch );  // true is NOT blind
+   bool dark = !xIS_SET( ch->act, PLR_HOLYLIGHT ) && 
+               !IS_AFFECTED( ch, AFF_TRUESIGHT ) && 
+               !IS_AFFECTED( ch, AFF_INFRARED ) && 
+               room_is_dark( ch->in_room );
+   
+   snprintf(buf, sizeof (buf), 
+             "\xFF\xFA\x66"         // IAC SB 102
+             "inroom={"
+             "blind=%s;"            // character blind?
+             "dark=%s;"            // room dark?
+             "objects={",
+             TRUE_OR_FALSE (blind),
+             TRUE_OR_FALSE (dark)
+             );  
+
+   if (!(blind || dark))
+     {
+     char *pDesc;
+     char *pType;
+     int iCount = 0;
+     OBJ_DATA *obj;
+                  
+     for( obj = ch->in_room->first_content; obj; obj = obj->next_content )
+     {
+        if( obj->wear_loc == WEAR_NONE
+            && can_see_obj( ch, obj ) && ( obj->item_type != ITEM_TRAP || IS_AFFECTED( ch, AFF_DETECTTRAPS ) ) )
+        {
+        iCount++;  
+        pDesc = fixup_lua_strings (format_obj_to_char( obj, ch, FALSE ));
+        pType = fixup_lua_strings (o_types [obj->item_type]);
+        snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
+                "[%i]={dsc=%s;typ=%s};", iCount, pDesc, pType);  
+        free (pDesc);
+        free (pType);
+   
+       }  // end of can see it
+     }  // end of for each item
+     
+    // end of objects table
+    strncpy(&buf [strlen (buf)], "};players={", sizeof (buf) - strlen (buf)); 
+    
+    // PLAYERS
+    
+    iCount = 0;
+    CHAR_DATA* rch;
+    
+    for( rch = ch->in_room->first_person; rch; rch = rch->next_in_room )
+      {
+        if( rch == ch )
+           continue;
+  
+        if( can_see( ch, rch ) && !IS_NPC( rch ))
+          {
+          iCount++;  
+          pDesc = fixup_lua_strings (rch->name);
+          const char * pFighting = "false";
+          const char * pFightWho = NULL;
+          switch (rch->position)
+          {
+           case POS_FIGHTING:
+           case POS_EVASIVE:
+           case POS_DEFENSIVE:
+           case POS_AGGRESSIVE:
+           case POS_BERSERK:
+              pFighting = "true"; 
+              if (who_fighting( rch ) == ch)
+                pFightWho = "YOU!";
+              else
+                pFightWho = PERS (who_fighting( rch ), ch);                    
+              break;
+          } // end of switch
+          char * pFightWhoFixed = fixup_lua_strings (pFightWho);
+          snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
+                  "[%i]={dsc=%s;lvl=%i;fight=%s;target=%s};", iCount, pDesc, rch->level, pFighting, pFightWhoFixed);  
+          free (pDesc);
+          free (pFightWhoFixed);
+          }
+      }    // end of for each character
+
+    strncpy(&buf [strlen (buf)], "};npcs={", sizeof (buf) - strlen (buf)); 
+    
+    // NPCS
+    
+    iCount = 0;
+    
+    for( rch = ch->in_room->first_person; rch; rch = rch->next_in_room )
+      {
+        if( rch == ch )
+           continue;
+  
+        if( can_see( ch, rch ) && IS_NPC( rch ))
+          {
+          iCount++;  
+          pDesc = fixup_lua_strings (rch->long_descr);
+          const char * pFighting = "false";
+          const char * pFightWho = NULL;
+          const char * pAggressive = "false";
+          switch (rch->position)
+          {
+           case POS_FIGHTING:
+           case POS_EVASIVE:
+           case POS_DEFENSIVE:
+           case POS_AGGRESSIVE:
+           case POS_BERSERK:
+              pFighting = "true"; 
+              if (who_fighting( rch ) == ch)
+                pFightWho = "YOU!";
+              else
+                pFightWho = PERS (who_fighting( rch ), ch);                    
+              break;
+          } // end of switch
+          char * pFightWhoFixed = fixup_lua_strings (pFightWho);
+          
+          if( xIS_SET( rch->act, ACT_AGGRESSIVE ) || xIS_SET( rch->act, ACT_META_AGGR ) )
+            pAggressive = "true";
+          snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
+                  "[%i]={dsc=%s;lvl=%i;fight=%s;target=%s;aggro=%s};", 
+                    iCount, pDesc, rch->level, pFighting, pFightWhoFixed, pAggressive);  
+          free (pDesc);
+          free (pFightWhoFixed);
+          }
+      }    // end of for each npc
+           
+    // end of characters table
+    strncpy(&buf [strlen (buf)], "};", sizeof (buf) - strlen (buf));  
+    
+    } // not blind or dark
+           
+  // finish telnet negotiation after all done
+  strncpy(&buf [strlen (buf)], "} \xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
+  
+  send_to_char( buf, ch );
+             
+} // end send_inroom_info

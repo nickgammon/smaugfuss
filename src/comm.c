@@ -1416,13 +1416,13 @@ void read_from_buffer( DESCRIPTOR_DATA * d )
             if( d->inbuf[i - 1] == ( signed char )DO )
                {
                d->want_server_status = true;
-               write_to_descriptor(d, "\xFF\xFA\x66 tt=\"version\";version=1.0;\xFF\xF0", 0);
+               write_to_descriptor(d, "\xFF\xFA\x66 version=1.0;\xFF\xF0", 0);
                // define bar colours
-               write_to_descriptor(d, "\xFF\xFA\x66 bar={"
-                                      "HP={clr=\"darkgreen\"};"     // hp
-                                      "Mana={clr=\"mediumblue\"};"  // mana 
-                                      "Move={clr=\"gold\"};"        // movement
-                                      "};"                          // end bar
+               write_to_descriptor(d, "\xFF\xFA\x66 hint={stats={"        // hint for stats colours
+                                      "HP={clr=\"darkgreen\",seq=1;};"    // hp
+                                      "Mana={clr=\"mediumblue\",seq=2};"  // mana 
+                                      "Move={clr=\"gold\",seq=3};"        // movement
+                                      "}};"                               // end stats
                                       "\xFF\xF0", 0);
                }
             else if( d->inbuf[i - 1] == ( signed char )DONT )
@@ -3762,7 +3762,13 @@ void display_prompt( DESCRIPTOR_DATA * d )
    send_to_char( buf, ch );
    return;
 }
-
+ 
+static const char *const char_position[] = {
+   "dead", "wounded", "incapacitated", "stunned", "sleeping", "berserk",
+   "resting", "aggressive", "sitting", "fighting", "defensive",
+   "evasive", "standing", "mounted", "shove", "drag"
+}; 
+   
 void show_status( CHAR_DATA *ch )
 {
   
@@ -3784,12 +3790,22 @@ void show_status( CHAR_DATA *ch )
        
      
      char * pName = fixup_lua_strings (IS_NPC( gch ) ? gch->short_descr : gch->name);
+     CHAR_DATA *master = gch->master;
+     const char * pMasterName = NULL;
+     if (master)
+       pMasterName = IS_NPC( master ) ? master->short_descr : master->name;
+    
+     char * pFollowingName = fixup_lua_strings (pMasterName);
        
+     char * pPosition = fixup_lua_strings (char_position [gch->position]);
+     
      iCount++;       
        snprintf(&group [strlen (group)], sizeof (group) - strlen (group), 
                "[%i]={"               // ith member
                "name=%s;"             // group member name
                "me=%s;"               // is this me?
+               "follow=%s;"           // who are we following?
+               "leader=%s;"           // are we the leader?
                "stats={"                // status bar info
                "HP={cur=%d;max=%d};"      // hp points
                "Mana={cur=%d;max=%d};"    // mana 
@@ -3798,25 +3814,27 @@ void show_status( CHAR_DATA *ch )
                "xp={cur=%d;max=%d};"  // experience
                "level=%d;"            // level
                "combat=%s;"           // in combat or not
-               "dead=%s;"             // dead?
-               "poisoned=%s;};",      // poisoned?
+               "position=%s;",        // position (eg. standing, dead, sleeping)
                iCount,
-               pName,
-               TRUE_OR_FALSE (gch == ch),
-               gch->hit,
+               pName,                  // name
+               TRUE_OR_FALSE (gch == ch),  // if true, this is me!
+               pFollowingName,         // who we are following
+               TRUE_OR_FALSE (gch->leader == NULL),
+               gch->hit,               // HP
                gch->max_hit,
                IS_VAMPIRE( gch ) ? 0 : gch->mana,
                IS_VAMPIRE( gch ) ? 0 : gch->max_mana,
-               gch->move,
+               gch->move,              // movement
                gch->max_move,
-               gch->exp,
-               exp_level( gch, gch->level + 1 ),
+               gch->exp - exp_level( gch, gch->level),  // xp achieved *this level*
+               exp_level( gch, gch->level + 1 )- exp_level( gch, gch->level),
                gch->level,
                (gch->fighting && gch->fighting->who) ? "true" : "false",
-               TRUE_OR_FALSE (char_died( gch )),
-               TRUE_OR_FALSE (IS_AFFECTED( gch, AFF_POISON ))
+               pPosition
                );
       free (pName); 
+      free (pFollowingName); 
+      free (pPosition); 
        
       if( gch->first_affect )
        {
@@ -3828,7 +3846,7 @@ void show_status( CHAR_DATA *ch )
        for( paf = gch->first_affect; paf; paf = paf->next )
          {
          sktmp = get_skilltype( paf->type );
-         if (sktmp)
+         if (sktmp && sktmp->target != TAR_CHAR_OFFENSIVE)
             {
             pAffectName = fixup_lua_strings (sktmp->name);
             
@@ -3836,11 +3854,38 @@ void show_status( CHAR_DATA *ch )
                  "%s;", pAffectName);
                            
             free (pAffectName); 
-           }
+            } // name found
            
          } // end for loop
        strncpy(&group [strlen (group)], "};", sizeof (group) - strlen (group)); 
        }  // end if any affects
+
+      if( gch->first_affect )
+       {
+       AFFECT_DATA *paf;
+       SKILLTYPE *sktmp;
+       char * pAffectName;
+      
+       strncpy(&group [strlen (group)], "debuffs={", sizeof (group) - strlen (group)); 
+       for( paf = gch->first_affect; paf; paf = paf->next )
+         {
+         sktmp = get_skilltype( paf->type );
+         if (sktmp && sktmp->target == TAR_CHAR_OFFENSIVE)
+            {
+            pAffectName = fixup_lua_strings (sktmp->name);
+            
+            snprintf(&group [strlen (group)], sizeof (group) - strlen (group), 
+                 "%s;", pAffectName);
+                           
+            free (pAffectName); 
+            } // name found
+           
+         } // end for loop
+       strncpy(&group [strlen (group)], "};", sizeof (group) - strlen (group)); 
+       }  // end if any affects
+              
+     // wrap up entry for this person
+     strncpy(&group [strlen (group)], "};", sizeof (group) - strlen (group)); 
               
      }  // end of in our group
   }  // end of for loop
@@ -3876,7 +3921,7 @@ void show_status( CHAR_DATA *ch )
        
        snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
                "victim={name=%s;" // name
-               "bar={"                // status bar info
+               "stats={"                // status bar info
                "HP={cur=%d;max=%d};"      // hp points
                "};"                   // end bar table
                "level=%d;"            // level

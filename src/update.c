@@ -1960,6 +1960,7 @@ void update_handler( void )
    static int pulse_point;
    static int pulse_second;
    static int pulse_time;
+   static int pulse_look;    // force periodic look around
    struct timeval sttime;
    struct timeval etime;
 
@@ -1994,6 +1995,17 @@ void update_handler( void )
       char_calendar_update(  );
    }
 
+   if ( --pulse_look <= 0)
+   {
+   pulse_look = 20;   // every 5 seconds or so
+   
+   // notify characters in every room in case fight changes stuff (eg. who is fighting what)
+   CHAR_DATA *gch; 
+   for( gch = first_char; gch; gch = gch->next )
+     if (!IS_NPC( gch ))
+       send_inroom_info (gch);
+   }
+ 
    if( --pulse_point <= 0 )
    {
       pulse_point = number_range( ( int )( PULSE_TICK * 0.75 ), ( int )( PULSE_TICK * 1.25 ) );
