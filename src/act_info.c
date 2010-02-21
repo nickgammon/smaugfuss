@@ -5123,7 +5123,6 @@ void send_inroom_info ( CHAR_DATA* ch)
    if (!(blind || dark))
      {
      char *pDesc;
-     char *pType;
      int iCount = 0;
      OBJ_DATA *obj;
                   
@@ -5135,12 +5134,12 @@ void send_inroom_info ( CHAR_DATA* ch)
             && can_see_obj( ch, obj ) && ( obj->item_type != ITEM_TRAP || IS_AFFECTED( ch, AFF_DETECTTRAPS ) ) )
         {
         iCount++;  
-        pDesc = fixup_lua_strings (format_obj_to_char( obj, ch, FALSE ));
-        pType = fixup_lua_strings (o_types [obj->item_type]);
+        int iAlt = 0;
+        // corpse decay information <sigh>
+        if (obj->item_type == ITEM_CORPSE_NPC || obj->item_type == ITEM_CORPSE_PC)
+          iAlt = UMIN( obj->value[2] - 1, 4 );
         snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
-                "[%i]={dsc=%s;typ=%s;guid=\"%lld\"};", iCount, pDesc, pType, obj->guid);  
-        free (pDesc);
-        free (pType);
+                "[%i]={guid=\"%lld\";alt=%i};", iCount, obj->guid, iAlt);  
    
        }  // end of can see it
      }  // end of for each item
@@ -5155,9 +5154,6 @@ void send_inroom_info ( CHAR_DATA* ch)
     
     for( rch = ch->in_room->first_person; rch; rch = rch->next_in_room )
       {
-        if( rch == ch )
-           continue;
-  
         if( can_see( ch, rch ) && !IS_NPC( rch ))
           {
           iCount++;  
@@ -5180,7 +5176,9 @@ void send_inroom_info ( CHAR_DATA* ch)
           } // end of switch
           char * pFightWhoFixed = fixup_lua_strings (pFightWho);
           snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
-                  "[%i]={dsc=%s;lvl=%i;fight=%s;target=%s};", iCount, pDesc, rch->level, pFighting, pFightWhoFixed);  
+                  "[%i]={dsc=%s;lvl=%i;fight=%s;target=%s;me=%s};", 
+                  iCount, pDesc, rch->level, pFighting, pFightWhoFixed,
+                  TRUE_OR_FALSE (rch == ch));  
           free (pDesc);
           free (pFightWhoFixed);
           }

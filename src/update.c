@@ -37,6 +37,7 @@ void char_check( void );
 void drunk_randoms( CHAR_DATA * ch );
 void hallucinations( CHAR_DATA * ch );
 void subtract_times( struct timeval *etime, struct timeval *sttime );
+void send_guid_info ( void);
 
 /* From interp.c */
 bool check_social( CHAR_DATA * ch, const char *command, const char *argument );
@@ -2050,6 +2051,7 @@ void update_handler( void )
    room_act_update(  );
    clean_obj_queue(  ); /* dispose of extracted objects */
    clean_char_queue(  );   /* dispose of dead mobs/quitting chars */
+   send_guid_info();  // send data on guids requested by client
    if( timechar )
    {
       gettimeofday( &etime, NULL );
@@ -2472,3 +2474,103 @@ void hint_update(  )
       }
    }
 }
+
+
+
+
+std::string build_object_info (DESCRIPTOR_DATA * d, const GUID guid)
+{
+
+char buf[MAX_STRING_LENGTH];
+  
+  std::map<GUID,OBJ_DATA *>::iterator iter = guid_object_map.find (guid);
+ 
+  if (iter == guid_object_map.end ())
+     snprintf(buf, sizeof (buf), "[\"%lld\"]=false;", guid);  
+  else
+    {
+    OBJ_DATA * obj = iter->second;
+   
+    char * pName        = fixup_lua_strings (obj->name);
+    char * pShort       = fixup_lua_strings (obj->short_descr);
+    char * pDesc        = fixup_lua_strings (obj->description);
+    char * pActionDesc  = fixup_lua_strings (obj->action_desc);
+    char * pType        = fixup_lua_strings (o_types [obj->item_type]);
+
+    snprintf(buf, sizeof (buf), 
+             "[\"%lld\"]="
+             "{name=%s;short=%s;dsc=%s;lookdsc=%s;"
+             "typ=%s;wear=%i;weight=%i;cost=%i;level=%i;};",
+             guid, 
+             pName,
+             pShort,
+             pDesc,
+             pActionDesc,
+             pType,
+             obj->wear_loc,
+             obj->weight,
+             obj->cost,
+             obj->level
+             );  
+    free (pName);
+    free (pShort);
+    free (pDesc);
+    free (pActionDesc);
+    free (pType);
+    
+    } // if found
+    
+    return std::string (buf);
+  } // end of build_object_info
+  
+#define MAX_GUIDS_TO_SEND_AT_ONCE 10
+
+void send_guid_info ( void)
+{
+DESCRIPTOR_DATA * d;
+  
+  // for all connected players
+  for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+      iter != descriptor_list.end(); 
+       )
+    {
+    d = *iter++;   // in case descriptor dropped from list during send
+    
+    // no character? forget it
+    if (!d->character)
+      continue;
+      
+    std::string sResult = "\xFF\xFA\x66 obj_info={";  // IAC SB 102
+    int iCount = 0;
+    
+    // send up to MAX_GUIDS_TO_SEND_AT_ONCE pieces of info at a time
+    for (int i = 0; i < MAX_GUIDS_TO_SEND_AT_ONCE; i++)
+      {
+      // if any ...
+      if (d->object_info_wanted.empty ())
+        break;   // none to send
+        
+      // get oldest item
+      GUID guid (d->object_info_wanted.front ());
+      d->object_info_wanted.pop_front ();  
+      
+      // one more in the list
+      sResult += build_object_info (d, guid); 
+      iCount++; 
+      
+      // remove any identical ones from the list to save sending twice
+      d->object_info_wanted.remove_if (std::bind2nd (std::equal_to<GUID> (), guid));
+      
+      } // end of for loop
+    
+    // anything?
+    if (iCount > 0)  
+      {  
+      sResult += "} \xFF\xF0";  // IAC SE 
+      write_to_buffer (d, sResult.c_str (), 0);
+      }
+      
+    } // end of each descriptor
+  
+  
+} // end of send_guid_info

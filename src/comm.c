@@ -1252,50 +1252,17 @@ bool read_from_descriptor( DESCRIPTOR_DATA * d )
 void process_client_request ( DESCRIPTOR_DATA * d )
   {
   char name [100];
-  long long value;
+  GUID guid;
   
-  int i = sscanf(d->telnet.c_str (), "%99s = \"%Ld\"", name, &value );
+  int i = sscanf(d->telnet.c_str (), "%99s = \"%Ld\"", name, &guid );
 
   if (i < 2) 
     return;
-    
-  char buf[MAX_STRING_LENGTH];
+   
+  std::string sName (name);
   
-  std::map<GUID,OBJ_DATA *>::iterator iter = guid_object_map.find (value);
- 
-  if (iter == guid_object_map.end ())
-     {
-     snprintf(buf, sizeof (buf), 
-             "\xFF\xFA\x66"         // IAC SB 102
-             "obj_info={"
-             "guid=\"%lld\";"
-             "info=false;}"
-             "\xFF\xF0",            // IAC SE
-             value  // GUID
-             );  
-    } // if not found
-  else
-    {
-    OBJ_DATA *obj = iter->second;
-    CHAR_DATA * ch = d->character;
-    if (ch)
-      {
-      char * pDesc = fixup_lua_strings (format_obj_to_char( obj, ch, FALSE ));
-      snprintf(buf, sizeof (buf), 
-               "\xFF\xFA\x66"         // IAC SB 102
-               "obj_info={"
-               "guid=\"%lld\";"
-               "info={dsc=%s;}"
-               "} \xFF\xF0",        // IAC SE
-               value,  // GUID
-               pDesc
-               );  
-      free (pDesc);
-      }
-    
-    } // if found
-    
-    write_to_buffer (d, buf, 0);
+  if (sName == "obj_info")
+    d->object_info_wanted.push_back (guid);
     
   } // end of process_client_request
 
@@ -4140,5 +4107,4 @@ GUID makeguid ()  // get a new GUID
   static GUID _guid = 0;
   return ++_guid;
   }
- 
  

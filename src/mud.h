@@ -836,6 +836,7 @@ public:
    telnet_states telnet_state;     // see enum above
    std::string incomm;   // currently-assembled command
    std::string inlast;   // their last command
+   std::list<GUID> object_info_wanted;  // guids of objects client wants info on
    int repeat;
    char *outbuf;
    unsigned long outsize;
