@@ -7414,7 +7414,11 @@ void do_installarea( CHAR_DATA* ch, const char* argument)
          /*
           * Fix up author if online 
           */
-         for( d = first_descriptor; d; d = d->next )
+         for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+              iter != descriptor_list.end(); 
+              iter++ )
+         {
+            d = *iter;
             if( d->character && d->character->pcdata && d->character->pcdata->area == tarea )
             {
                /*
@@ -7432,7 +7436,7 @@ void do_installarea( CHAR_DATA* ch, const char* argument)
                d->character->pcdata->m_range_hi = 0;
                save_char_obj( d->character );
             }
-
+        }
          top_area++;
          send_to_char( "Writing area.lst...\r\n", ch );
          write_area_list(  );

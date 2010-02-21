@@ -46,6 +46,8 @@ void rprog_read_programs( FILE * fp, ROOM_INDEX_DATA * pRoomIndex );
 WIZENT *first_wiz;
 WIZENT *last_wiz;
 
+std::map<GUID,OBJ_DATA *> guid_object_map;
+
 time_t last_restore_all_time = 0;
 
 HELP_DATA *first_help;
@@ -2773,6 +2775,9 @@ OBJ_DATA *create_object( OBJ_INDEX_DATA * pObjIndex, int level )
    obj->value[5] = pObjIndex->value[5];
    obj->weight = pObjIndex->weight;
    obj->cost = pObjIndex->cost;
+   obj->guid = makeguid ();
+   guid_object_map [obj->guid] = obj;
+   
    /*
     * obj->cost     = number_fuzzy( 10 )
     * * number_fuzzy( level ) * number_fuzzy( level );
@@ -3741,7 +3746,7 @@ void do_memory( CHAR_DATA* ch, const char* argument)
    ch_printf_color( ch, "&wRooms:   &W%5d\t\t\t&wVRooms:  &W%5d\r\n", top_room, top_vroom );
    ch_printf_color( ch, "&wShops:   &W%5d\t\t\t&wRepShps: &W%5d\r\n", top_shop, top_repair );
    ch_printf_color( ch, "&wCurOq's: &W%5d\t\t\t&wCurCq's: &W%5d\r\n", cur_qobjs, cur_qchars );
-   ch_printf_color( ch, "&wPlayers: &W%5d\t\t\t&wMaxplrs: &W%5d\r\n", num_descriptors, sysdata.maxplayers );
+   ch_printf_color( ch, "&wPlayers: &W%5d\t\t\t&wMaxplrs: &W%5d\r\n", descriptor_list.size (), sysdata.maxplayers );
    ch_printf_color( ch, "&wMaxEver: &W%5d\t\t\t&wSkills: &W%5d(%d)\r\n", sysdata.alltimemax, num_skills, MAX_SKILL );
    ch_printf_color( ch, "&wMaxEver was recorded on:  &W%s\r\n\r\n", sysdata.time_of_max );
    ch_printf_color( ch, "&wPotion Val:  &W%-16d   &wScribe/Brew: &W%d/%d\r\n",
@@ -5275,6 +5280,7 @@ void delete_obj( OBJ_INDEX_DATA * obj )
       else
          bug( "%s: object %d not in hash bucket %d.", __FUNCTION__, obj->vnum, hash );
    }
+   
    DISPOSE( obj );
    --top_obj_index;
    return;

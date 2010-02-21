@@ -1432,10 +1432,15 @@ int mprog_do_ifcheck( const char *ifcheck, CHAR_DATA * mob, CHAR_DATA * actor, O
    if( !str_cmp( chck, "mortinworld" ) )  /* -- Gorog */
    {
       DESCRIPTOR_DATA *d;
-      for( d = first_descriptor; d; d = d->next )
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+          iter++ )
+     {
+        d = *iter;
          if( d->connected == CON_PLAYING
              && d->character && get_trust( d->character ) < LEVEL_IMMORTAL && nifty_is_name( d->character->name, cvar ) )
             return TRUE;
+     }
       return FALSE;
    }
 

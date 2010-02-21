@@ -444,8 +444,11 @@ void talk_channel( CHAR_DATA * ch, const char *argument, int channel, const char
       append_to_file( LOG_FILE, buf2 );
    }
 
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       CHAR_DATA *och;
       CHAR_DATA *vch;
 
@@ -574,13 +577,16 @@ void to_channel( const char *argument, int channel, const char *verb, short leve
    char buf[MAX_STRING_LENGTH];
    DESCRIPTOR_DATA *d;
 
-   if( !first_descriptor || argument[0] == '\0' )
+   if( descriptor_list.empty () || argument[0] == '\0' )
       return;
 
    snprintf( buf, MAX_STRING_LENGTH, "%s: %s\r\n", verb, argument );
 
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       CHAR_DATA *och;
       CHAR_DATA *vch;
 
@@ -2660,8 +2666,11 @@ void talk_auction( char *argument )
 
    snprintf( buf, MAX_STRING_LENGTH, "Auction: %s", argument );   /* last %s to reset color */
 
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       original = d->original ? d->original : d->character;  /* if switched */
       if( ( d->connected == CON_PLAYING ) && !IS_SET( original->deaf, CHANNEL_AUCTION )
           && !xIS_SET( original->in_room->room_flags, ROOM_SILENCE ) && !NOT_AUTHED( original ) )

@@ -25,6 +25,13 @@
 #include <typeinfo>
 #endif
 
+#include <list>
+#include <map>
+#include <vector>
+#include <string>
+#include <algorithm>
+
+
 #ifdef WIN32
 #include <winsock.h>
 #include <sys/types.h>
@@ -47,6 +54,9 @@
 
 typedef int ch_ret;
 typedef int obj_ret;
+
+// global unique IDs
+typedef long long GUID;
 
 #define args( list )			list
 
@@ -765,13 +775,47 @@ typedef enum
    SUB_TIMER_DO_ABORT = 128, SUB_TIMER_CANT_ABORT
 } char_substates;
 
+typedef enum { TELNET_NONE,          // normal text
+               TELNET_IAC,      // just received a TELNET IAC (interpret as command)
+               TELNET_WILL,     // just received a TELNET WILL
+               TELNET_WONT,     // just received a TELNET WONT
+               TELNET_DO,       // just received a TELNET DO
+               TELNET_DONT,     // just received a TELNET DONT
+               TELNET_SB,       // just received a TELNET IAC SB
+               TELNET_SUBNEGOTIATION,  // received TELNET IAC SB c  (collecting data, awaiting IAC SE)
+               TELNET_SUBNEGOTIATION_IAC,  // received TELNET IAC SB c  <data> IAC  (awaiting IAC or SE)
+               } telnet_states;
+       
 /*
  * Descriptor (channel) structure.
  */
-struct descriptor_data
+class descriptor_data
 {
-   DESCRIPTOR_DATA *next;
-   DESCRIPTOR_DATA *prev;
+  
+public:
+
+   descriptor_data () : // constructor
+     snoop_by (NULL), 
+     character (NULL), 
+     original (NULL),
+     mccp (NULL), 
+     can_compress (false), 
+     host (NULL),
+     fcommand (false),
+     telnet_sb_type (0),
+     telnet_state (TELNET_NONE),
+     repeat (0),
+     outbuf (NULL), 
+     outsize (0),
+     outtop (0),
+     pagebuf (NULL), 
+     pagesize (0),
+     pagetop (0),
+     pagepoint (NULL), 
+     pagecmd (0),
+     pagecolor (0),
+     want_server_status (false) {};
+     
    DESCRIPTOR_DATA *snoop_by;
    CHAR_DATA *character;
    CHAR_DATA *original;
@@ -785,9 +829,13 @@ struct descriptor_data
    short lines;
    short scrlen;
    bool fcommand;
-   char inbuf[MAX_INBUF_SIZE];
-   char incomm[MAX_INPUT_LENGTH];
-   char inlast[MAX_INPUT_LENGTH];
+   std::string inbuf;    // raw data from descriptor
+   std::string intext;   // text other than telnet stuff
+   std::string telnet;   // currently-assembled telnet negotiation
+   unsigned char telnet_sb_type;   // what sort of subnegotiation
+   telnet_states telnet_state;     // see enum above
+   std::string incomm;   // currently-assembled command
+   std::string inlast;   // their last command
    int repeat;
    char *outbuf;
    unsigned long outsize;
@@ -2503,6 +2551,7 @@ struct obj_data
    short count;   /* support for object grouping */
    int serial; /* serial number         */
    int room_vnum; /* hotboot tracker */
+   GUID guid;  // unique ID
 };
 
 /*
@@ -3533,7 +3582,6 @@ extern int numobjsloaded;
 extern int nummobsloaded;
 extern int physicalobjects;
 extern int last_pkroom;
-extern int num_descriptors;
 extern struct system_data sysdata;
 extern int top_vroom;
 extern int top_herb;
@@ -3577,8 +3625,7 @@ extern RESERVE_DATA *first_reserved;
 extern RESERVE_DATA *last_reserved;
 extern CHAR_DATA *first_char;
 extern CHAR_DATA *last_char;
-extern DESCRIPTOR_DATA *first_descriptor;
-extern DESCRIPTOR_DATA *last_descriptor;
+extern std::list<DESCRIPTOR_DATA *> descriptor_list;
 extern BOARD_DATA *first_board;
 extern BOARD_DATA *last_board;
 extern PLANE_DATA *first_plane;
@@ -4320,6 +4367,7 @@ bool can_learn_lang( CHAR_DATA * ch, int language );
 int countlangs( int languages );
 char *translate( int percent, const char *in, const char *name );
 const char *obj_short( OBJ_DATA * obj );
+GUID makeguid ();  // get a new GUID
 
 /* act_info.c */
 int get_door( const char *arg );
@@ -5067,3 +5115,13 @@ OBJ_DATA *trvobj_wnext( TRV_WORLD * );
 /* Global lists adjusting after a node removal */
 void trworld_char_check( CHAR_DATA * );
 void trworld_obj_check( OBJ_DATA * );
+
+/* added by NJG */
+
+struct DeleteObject
+  {
+  template <typename T>
+  void operator() (const T* ptr) const { delete ptr; };
+  };
+
+extern std::map<GUID, OBJ_DATA *> guid_object_map;

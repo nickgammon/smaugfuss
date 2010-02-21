@@ -547,8 +547,11 @@ CHAR_DATA *get_waiting_desc( CHAR_DATA * ch, char *name )
    static unsigned int number_of_hits;
 
    number_of_hits = 0;
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       if( d->character && ( !str_prefix( name, d->character->name ) ) && IS_WAITING_FOR_AUTH( d->character ) )
       {
          if( ++number_of_hits > 1 )
@@ -587,13 +590,18 @@ void do_authorize( CHAR_DATA* ch, const char* argument)
       send_to_char( "Pending authorizations:\r\n", ch );
       send_to_char( " Chosen Character Name\r\n", ch );
       send_to_char( "---------------------------------------------\r\n", ch );
-      for( d = first_descriptor; d; d = d->next )
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+          iter++ )
+     {
+        d = *iter;
          if( ( victim = d->character ) != NULL && IS_WAITING_FOR_AUTH( victim ) )
             ch_printf( ch, " %s@%s new %s %s (%s)...\r\n",
                        victim->name,
                        victim->desc->host,
                        race_table[victim->race]->race_name,
                        class_table[victim->Class]->who_name, IS_PKILL( victim ) ? "Deadly" : "Peaceful" );
+      }
       return;
    }
 
@@ -942,8 +950,11 @@ void do_disconnect( CHAR_DATA* ch, const char* argument)
       return;
    }
 
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       if( d == victim->desc )
       {
          close_socket( d, FALSE );
@@ -1008,8 +1019,11 @@ void do_forceclose( CHAR_DATA* ch, const char* argument)
    }
 
    desc = atoi( arg );
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       if( d->descriptor == desc )
       {
          if( d->character && get_trust( d->character ) >= get_trust( ch ) )
@@ -1096,8 +1110,11 @@ void echo_to_all( short AT_COLOR, const char *argument, short tar )
    if( !argument || argument[0] == '\0' )
       return;
 
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       /*
        * Added showing echoes to players who are editing, so they won't
        * miss out on important info like upcoming reboots. --Narn 
@@ -1319,8 +1336,11 @@ void do_transfer( CHAR_DATA* ch, const char* argument)
 
    if( !str_cmp( arg1, "all" ) && get_trust( ch ) >= LEVEL_GREATER )
    {
-      for( d = first_descriptor; d; d = d->next )
-      {
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+          iter++ )
+     {
+        d = *iter;
          if( d->connected == CON_PLAYING && d->character && d->character != ch && d->character->in_room )
             transfer_char( ch, d->character, location );
       }
@@ -2361,7 +2381,11 @@ void do_gwhere( CHAR_DATA* ch, const char* argument)
    pager_printf_color( ch, "\r\n&cGlobal %s locations:&w\r\n", pmobs ? "mob" : "player" );
    if( !pmobs )
    {
-      for( d = first_descriptor; d; d = d->next )
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+          iter++ )
+     {
+        d = *iter;
          if( ( d->connected == CON_PLAYING || d->connected == CON_EDITING )
              && ( victim = d->character ) != NULL && !IS_NPC( victim ) && victim->in_room
              && can_see( ch, victim ) && victim->level >= low && victim->level <= high )
@@ -2372,6 +2396,7 @@ void do_gwhere( CHAR_DATA* ch, const char* argument)
                                 victim->in_room->name );
             count++;
          }
+     }
    }
    else
    {
@@ -2427,7 +2452,11 @@ void do_gfighting( CHAR_DATA* ch, const char* argument)
    pager_printf_color( ch, "\r\n&cGlobal %s conflict:\r\n", pmobs ? "mob" : "character" );
    if( !pmobs && !phating && !phunting )
    {
-      for( d = first_descriptor; d; d = d->next )
+       for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+            iter != descriptor_list.end(); 
+            iter++ )
+       {
+          d = *iter;
          if( ( d->connected == CON_PLAYING || d->connected == CON_EDITING )
              && ( victim = d->character ) != NULL && !IS_NPC( victim ) && victim->in_room
              && can_see( ch, victim ) && victim->fighting && victim->level >= low && victim->level <= high )
@@ -2440,6 +2469,7 @@ void do_gfighting( CHAR_DATA* ch, const char* argument)
                                 victim->in_room->area->name, victim->in_room == NULL ? 0 : victim->in_room->vnum );
             count++;
          }
+     }
    }
    else if( !phating && !phunting )
    {
@@ -2914,10 +2944,15 @@ void do_snoop( CHAR_DATA* ch, const char* argument)
    }
    if( victim == ch )
    {
-      send_to_char( "Cancelling all snoops.\r\n", ch );
-      for( d = first_descriptor; d; d = d->next )
+     send_to_char( "Cancelling all snoops.\r\n", ch );
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+          iter++ )
+     {
+        d = *iter;
          if( d->snoop_by == ch->desc )
             d->snoop_by = NULL;
+     }
       return;
    }
    if( victim->desc->snoop_by )
@@ -4768,8 +4803,11 @@ void do_users( CHAR_DATA* ch, const char* argument)
    count = 0;
    send_to_pager( "Desc|     Constate      |Idle|    Player    | HostIP                   \r\n", ch );
    send_to_pager( "----+-------------------+----+--------------+--------------------------\r\n", ch );
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       switch ( d->connected )
       {
          case CON_PLAYING:
@@ -5059,9 +5097,7 @@ void do_mortalize( CHAR_DATA* ch, const char* argument)
    snprintf( fname, 1024, "%s%c/%s", PLAYER_DIR, tolower( name[0] ), capitalize( name ) );
    if( stat( fname, &fst ) != -1 )
    {
-      CREATE( d, DESCRIPTOR_DATA, 1 );
-      d->next = NULL;
-      d->prev = NULL;
+      d = new DESCRIPTOR_DATA;
       d->connected = CON_GET_NAME;
       d->outsize = 2000;
       CREATE( d->outbuf, char, d->outsize );
@@ -5082,7 +5118,7 @@ void do_mortalize( CHAR_DATA* ch, const char* argument)
       victim = d->character;
       d->character = NULL;
       DISPOSE( d->outbuf );
-      DISPOSE( d );
+      delete d;
       victim->level = LEVEL_AVATAR;
       victim->exp = exp_level( victim, LEVEL_AVATAR );
       victim->max_hit = 800;
@@ -5193,9 +5229,7 @@ void do_loadup( CHAR_DATA* ch, const char* argument)
 
    if( stat( fname, &fst ) != -1 )
    {
-      CREATE( d, DESCRIPTOR_DATA, 1 );
-      d->next = NULL;
-      d->prev = NULL;
+      d = new DESCRIPTOR_DATA;
       d->connected = CON_GET_NAME;
       d->outsize = 2000;
       CREATE( d->outbuf, char, d->outsize );
@@ -5216,7 +5250,7 @@ void do_loadup( CHAR_DATA* ch, const char* argument)
       d->character->retran = old_room_vnum;
       d->character = NULL;
       DISPOSE( d->outbuf );
-      DISPOSE( d );
+      delete d;
       ch_printf( ch, "Player %s loaded from room %d.\r\n", capitalize( name ), old_room_vnum );
       snprintf( buf, MAX_STRING_LENGTH, "%s appears from nowhere, eyes glazed over.\r\n", capitalize( name ) );
       act( AT_IMMORT, buf, ch, NULL, NULL, TO_ROOM );
@@ -5963,9 +5997,14 @@ void do_destroy( CHAR_DATA* ch, const char* argument)
       /*
        * Make sure they aren't halfway logged in. 
        */
-      for( d = first_descriptor; d; d = d->next )
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+          iter++ )
+       {
+        d = *iter;
          if( ( victim = d->character ) && !IS_NPC( victim ) && !str_cmp( victim->name, arg ) )
             break;
+      }
       if( d )
          close_socket( d, TRUE );
    }
@@ -9708,8 +9747,11 @@ void do_ipcompare( CHAR_DATA* ch, const char* argument)
    if( !str_cmp( arg, "total" ) )
    {
       IPCOMPARE_DATA *first_ip = NULL, *last_ip = NULL, *hmm, *hmm_next;
-      for( d = first_descriptor; d; d = d->next )
-      {
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+          iter++ )
+     {
+        d = *iter;
          fMatch = FALSE;
          for( hmm = first_ip; hmm; hmm = hmm->next )
             if( !str_cmp( hmm->host, d->host ) )
@@ -9751,8 +9793,11 @@ void do_ipcompare( CHAR_DATA* ch, const char* argument)
       mudstrlcat( buf, "\r\n", MAX_STRING_LENGTH );
       send_to_pager( buf, ch );
 
-      for( d = first_descriptor; d; d = d->next )
-      {
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+          iter++ )
+     {
+        d = *iter;
          IPCOMPARE_DATA *temp;
 
          if( ( d->connected != CON_PLAYING && d->connected != CON_EDITING )
@@ -9771,8 +9816,11 @@ void do_ipcompare( CHAR_DATA* ch, const char* argument)
          LINK( temp, first_ip, last_ip, next, prev );
       }
 
-      for( d = first_descriptor; d; d = d->next )
-      {
+       for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+            iter != descriptor_list.end(); 
+            iter++ )
+       {
+          d = *iter;
          fMatch = FALSE;
          if( ( d->connected != CON_PLAYING && d->connected != CON_EDITING )
              || d->character == NULL || !can_see( ch, d->character ) )
@@ -9886,8 +9934,11 @@ void do_ipcompare( CHAR_DATA* ch, const char* argument)
       mudstrlcat( buf, "+---------", MAX_STRING_LENGTH );
    mudstrlcat( buf, "\r\n", MAX_STRING_LENGTH );
    send_to_pager( buf, ch );
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       if( !d->character || ( d->connected != CON_PLAYING && d->connected != CON_EDITING ) || !can_see( ch, d->character ) )
          continue;
       if( inroom && ch->in_room != d->character->in_room )

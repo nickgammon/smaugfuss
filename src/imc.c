@@ -707,11 +707,14 @@ CHAR_DATA *imc_find_user( const char *name )
    DESCRIPTOR_DATA *d;
    CHAR_DATA *vch = NULL;
 
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
-      if( ( vch = d->character ? d->character : d->original ) != NULL && !strcasecmp( CH_IMCNAME( vch ), name )
-          && d->connected == CON_PLAYING )
-         return vch;
+     d = *iter;
+     if( ( vch = d->character ? d->character : d->original ) != NULL && !strcasecmp( CH_IMCNAME( vch ), name )
+         && d->connected == CON_PLAYING )
+        return vch;
    }
    return NULL;
 }
@@ -1709,8 +1712,11 @@ PFUN( imc_recv_emote )
    if( level < 0 || level > IMCPERM_IMP )
       level = IMCPERM_IMM;
 
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       if( d->connected == CON_PLAYING && ( ch = d->original ? d->original : d->character ) != NULL
           && IMCPERM( ch ) >= level )
          imc_printf( ch, "~p[~GIMC~p] %s %s\r\n", imcgetname( q->from ), txt );
@@ -1817,8 +1823,11 @@ void imc_display_channel( IMC_CHANNEL * c, const char *from, char *txt, int emot
    else
       snprintf( buf, LGST, c->socformat, txt );
 
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       ch = d->original ? d->original : d->character;
 
       if( !ch || d->connected != CON_PLAYING )
@@ -1951,8 +1960,11 @@ const char *get_local_chanwho( IMC_CHANNEL * c )
    snprintf( buf, IMC_BUFF_SIZE, "The following people are listening to %s on %s:\r\n\r\n",
              c->local_name, this_imcmud->localname );
 
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       person = d->original ? d->original : d->character;
 
       if( !person )
@@ -2236,8 +2248,11 @@ char *imc_assemble_who( void )
    plrheader[0] = '\0';
    immheader[0] = '\0';
 
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       person = d->original ? d->original : d->character;
 
       if( person && d->connected == CON_PLAYING )
@@ -2271,8 +2286,11 @@ char *imc_assemble_who( void )
    }
 
    imm = FALSE;
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       person = d->original ? d->original : d->character;
 
       if( person && d->connected == CON_PLAYING )

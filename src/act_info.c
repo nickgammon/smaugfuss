@@ -2628,8 +2628,11 @@ void create_whogr( CHAR_DATA * looker )
    /*
     * Link in the ones without leaders first 
     */
-   for( d = last_descriptor; d; d = d->prev )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       if( d->connected != CON_PLAYING && d->connected != CON_EDITING )
          continue;
       ++dc;
@@ -2656,8 +2659,11 @@ void create_whogr( CHAR_DATA * looker )
     * Now for those who have leaders.. 
     */
    while( wc < dc )
-      for( d = last_descriptor; d; d = d->prev )
-      {
+       for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+            iter != descriptor_list.end(); 
+            iter++ )
+       {
+          d = *iter;
          if( d->connected != CON_PLAYING && d->connected != CON_EDITING )
             continue;
          if( find_whogr( d, first_whogr ) )
@@ -2897,22 +2903,38 @@ void do_who( CHAR_DATA* ch, const char* argument)
       }
    }
 
+  std::list<DESCRIPTOR_DATA * >::iterator iter;
+  
 /* start from last to first to get it in the proper order */
    if( fGroup )
-   {
+    {
       create_whogr( ch );
       whogr = first_whogr;
       d = whogr->d;
-   }
+    }
    else
-   {
+    {
       whogr = NULL;
-      d = last_descriptor;
-   }
+      iter = descriptor_list.begin();
+    }
+
    whogr_p = NULL;
-   for( ; d; whogr_p = whogr, whogr = ( fGroup ? whogr->next : NULL ),
-        d = ( fGroup ? ( whogr ? whogr->d : NULL ) : d->prev ) )
+   for( ; ; whogr_p = whogr, whogr = ( fGroup ? whogr->next : NULL ),
+        d = ( fGroup ? ( whogr ? whogr->d : NULL ) : NULL ) )
    {
+    if (fGroup)
+      {
+      if (d == NULL)
+        break;          
+      }
+    else
+      {
+      if (iter == descriptor_list.end())
+        break;
+      d = *iter++;
+      }
+         
+            
       CHAR_DATA *wch;
       char const *Class;
 
@@ -3389,7 +3411,11 @@ void do_where( CHAR_DATA* ch, const char* argument)
    {
       pager_printf( ch, "\r\nPlayers near you in %s:\r\n", ch->in_room->area->name );
       found = FALSE;
-      for( d = first_descriptor; d; d = d->next )
+       for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+            iter != descriptor_list.end(); 
+            iter++ )
+       {
+          d = *iter;
          if( ( d->connected == CON_PLAYING || d->connected == CON_EDITING ) && ( victim = d->character ) != NULL && !IS_NPC( victim ) && victim->in_room && victim->in_room->area == ch->in_room->area && can_see( ch, victim ) && ( get_trust( ch ) >= get_trust( victim ) || !IS_SET( victim->pcdata->flags, PCFLAG_DND ) ) )  /* if victim has the DND flag ch must outrank them */
 
          {
@@ -3411,6 +3437,7 @@ void do_where( CHAR_DATA* ch, const char* argument)
                send_to_pager( "\t\t\t", ch );
             pager_printf_color( ch, "&P%s\r\n", victim->in_room->name );
          }
+      } 
       if( !found )
          send_to_char( "None\r\n", ch );
    }
@@ -5100,6 +5127,8 @@ void send_inroom_info ( CHAR_DATA* ch)
      int iCount = 0;
      OBJ_DATA *obj;
                   
+     // OBJECTS
+     
      for( obj = ch->in_room->first_content; obj; obj = obj->next_content )
      {
         if( obj->wear_loc == WEAR_NONE
@@ -5109,7 +5138,7 @@ void send_inroom_info ( CHAR_DATA* ch)
         pDesc = fixup_lua_strings (format_obj_to_char( obj, ch, FALSE ));
         pType = fixup_lua_strings (o_types [obj->item_type]);
         snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
-                "[%i]={dsc=%s;typ=%s};", iCount, pDesc, pType);  
+                "[%i]={dsc=%s;typ=%s;guid=\"%lld\"};", iCount, pDesc, pType, obj->guid);  
         free (pDesc);
         free (pType);
    
@@ -5209,6 +5238,6 @@ void send_inroom_info ( CHAR_DATA* ch)
   // finish telnet negotiation after all done
   strncpy(&buf [strlen (buf)], "} \xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
   
-  send_to_char( buf, ch );
+  write_to_buffer (ch->desc, buf, 0);
              
 } // end send_inroom_info

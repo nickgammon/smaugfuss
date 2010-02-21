@@ -1893,6 +1893,8 @@ void fread_obj( CHAR_DATA * ch, FILE * fp, short os_type )
    obj->count = 1;
    obj->wear_loc = -1;
    obj->weight = 1;
+   obj->guid = makeguid ();
+   guid_object_map [obj->guid] = obj;
 
    fNest = TRUE;  // Requiring a Nest 0 is a waste
    fVnum = FALSE; // We can't assume this - what if Vnum isn't written to the file? Crashy crashy is what. - Pulled from Smaug 1.8
@@ -2241,6 +2243,10 @@ void fread_obj( CHAR_DATA * ch, FILE * fp, short os_type )
             UNLINK( paf, obj->first_affect, obj->last_affect, next, prev );
             DISPOSE( paf );
          }
+         std::map<GUID,OBJ_DATA *>::iterator i = guid_object_map.find (obj->guid);
+         if (i != guid_object_map.end ())
+           guid_object_map.erase (i);
+         
          DISPOSE( obj );
          return;
       }

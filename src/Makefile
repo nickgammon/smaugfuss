@@ -99,7 +99,7 @@ indentclean:
 
 o/%.o: %.c
 	echo "  Compiling $@....";
-	$(CC) -c $(C_FLAGS) $< -o $@
+	$(CC) -x c++ -c $(C_FLAGS) $< -o $@
 
 .c.o: mud.h
 	$(CC) -c $(C_FLAGS) $<

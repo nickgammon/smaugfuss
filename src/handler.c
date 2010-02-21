@@ -1950,7 +1950,7 @@ void char_to_room( CHAR_DATA * ch, ROOM_INDEX_DATA * pRoomIndex )
      // finish telnet negotiation after the exits
      strncpy(&buf [strlen (buf)], "} \xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
      
-     send_to_char( buf, ch );
+    write_to_buffer (ch->desc, buf, 0);
    }
       
    /*
@@ -2609,6 +2609,10 @@ void extract_obj( OBJ_DATA * obj )
 
    UNLINK( obj, first_object, last_object, next, prev );
 
+   std::map<GUID,OBJ_DATA *>::iterator i = guid_object_map.find (obj->guid);
+   if (i != guid_object_map.end ())
+     guid_object_map.erase (i);
+   
    /*
     * shove onto extraction queue 
     */
@@ -4694,6 +4698,11 @@ void free_obj( OBJ_DATA * obj )
    STRFREE( obj->description );
    STRFREE( obj->short_descr );
    STRFREE( obj->action_desc );
+   
+   std::map<GUID,OBJ_DATA *>::iterator i = guid_object_map.find (obj->guid);
+   if (i != guid_object_map.end ())
+     guid_object_map.erase (i);
+   
    DISPOSE( obj );
    return;
 }
@@ -5002,6 +5011,9 @@ OBJ_DATA *clone_object( OBJ_DATA * obj )
    clone->value[4] = obj->value[4];
    clone->value[5] = obj->value[5];
    clone->count = 1;
+   clone->guid = makeguid ();
+   guid_object_map [clone->guid] = clone;
+   
    ++obj->pIndexData->count;
    ++numobjsloaded;
    ++physicalobjects;

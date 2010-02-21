@@ -583,15 +583,18 @@ void do_hotboot( CHAR_DATA* ch, const char* argument)
 {
    FILE *fp;
    CHAR_DATA *victim = NULL;
-   DESCRIPTOR_DATA *d, *de_next;
+   DESCRIPTOR_DATA *d;
    char buf[100], buf2[100], buf3[100];
    char log_buf[MAX_STRING_LENGTH];
    extern int control;
    int count = 0;
    bool found = FALSE;
 
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       if( ( d->connected == CON_PLAYING || d->connected == CON_EDITING )
           && ( victim = d->character ) != NULL && !IS_NPC( victim ) && victim->in_room
           && victim->fighting && victim->level >= 1 && victim->level <= MAX_LEVEL )
@@ -608,8 +611,11 @@ void do_hotboot( CHAR_DATA* ch, const char* argument)
    }
 
    found = FALSE;
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       if( d->connected == CON_EDITING && d->character )
       {
          found = TRUE;
@@ -649,10 +655,12 @@ void do_hotboot( CHAR_DATA* ch, const char* argument)
    /*
     * For each playing descriptor, save its state 
     */
-   for( d = first_descriptor; d; d = de_next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+         )
    {
+      d = *iter++;    // increment now in case we delete it
       CHAR_DATA *och = CH( d );
-      de_next = d->next;   /* We delete from the list , so need to save this */
       if( !d->character || d->connected < CON_PLAYING )  /* drop those logging on */
       {
          write_to_descriptor( d, "\r\nSorry, we are rebooting. Come back in a few minutes.\r\n", 0 );
@@ -770,9 +778,8 @@ void hotboot_recover( void )
          continue;
       }
 
-      CREATE( d, DESCRIPTOR_DATA, 1 );
+      d = new DESCRIPTOR_DATA;
 
-      d->next = NULL;
       d->descriptor = desc;
       d->connected = CON_GET_NAME;
       d->outsize = 2000;
@@ -793,7 +800,8 @@ void hotboot_recover( void )
       d->can_compress = dcompress;
       if( d->can_compress )
          compressStart( d );
-      LINK( d, first_descriptor, last_descriptor, next, prev );
+      descriptor_list.push_back (d);
+         
       d->connected = CON_COPYOVER_RECOVER;   /* negative so close_socket will cut them off */
 
       /*
@@ -822,8 +830,8 @@ void hotboot_recover( void )
          act( AT_MAGIC, "A puff of ethereal smoke dissipates around you!", d->character, NULL, NULL, TO_CHAR );
          act( AT_MAGIC, "$n appears in a puff of ethereal smoke!", d->character, NULL, NULL, TO_ROOM );
          d->connected = CON_PLAYING;
-         if( ++num_descriptors > sysdata.maxplayers )
-            sysdata.maxplayers = num_descriptors;
+         if( (int) descriptor_list.size () > sysdata.maxplayers )
+            sysdata.maxplayers = descriptor_list.size ();
 #ifdef AUTO_AUTH
          check_auth_state( d->character );   /* new auth */
 #endif

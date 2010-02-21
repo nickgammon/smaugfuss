@@ -678,8 +678,11 @@ short player_count( void )
    DESCRIPTOR_DATA *d;
    short count = 0;
 
-   for( d = first_descriptor; d; d = d->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      d = *iter;
       if( d->connected >= CON_PLAYING )
          ++count;
    }

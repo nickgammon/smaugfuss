@@ -30,7 +30,7 @@
 #include "mccp.h"
 #include "mssp.h"
 #include "sha256.h"
-
+#include <string>
 /*
  * Socket and TCP/IP stuff.
  */
@@ -103,10 +103,8 @@ void save_sysdata( SYSTEM_DATA sys );
  */
 IMMORTAL_HOST *immortal_host_start; /* Start of Immortal legal domains */
 IMMORTAL_HOST *immortal_host_end;   /* End of Immortal legal domains */
-DESCRIPTOR_DATA *first_descriptor;  /* First descriptor     */
-DESCRIPTOR_DATA *last_descriptor;   /* Last descriptor      */
-DESCRIPTOR_DATA *d_next;   /* Next descriptor in loop */
-int num_descriptors;
+std::list<DESCRIPTOR_DATA *> descriptor_list;
+
 bool mud_down; /* Shutdown       */
 bool service_shut_down; /* Shutdown by operator closing down service */
 time_t boot_time;
@@ -164,7 +162,6 @@ void cleanup_memory( void )
    int hash, loopa;
    CHAR_DATA *character;
    OBJ_DATA *object;
-   DESCRIPTOR_DATA *desc, *desc_next;
 
 #ifdef IMC
    fprintf( stdout, "%s", "IMC2 Data.\n" );
@@ -271,13 +268,12 @@ void cleanup_memory( void )
     * Descriptors 
     */
    fprintf( stdout, "%s", "Descriptors.\n" );
-   for( desc = first_descriptor; desc; desc = desc_next )
-   {
-      desc_next = desc->next;
-      UNLINK( desc, first_descriptor, last_descriptor, next, prev );
-      free_desc( desc );
-   }
-
+   
+    // delete all objects in list
+    std::for_each (descriptor_list.begin (), descriptor_list.end (), DeleteObject ());
+    // now delete them from the list
+    descriptor_list.clear ();
+    
    /*
     * Liquids 
     */
@@ -403,9 +399,6 @@ int main( int argc, char **argv )
 #endif
 
    DONT_UPPER = FALSE;
-   num_descriptors = 0;
-   first_descriptor = NULL;
-   last_descriptor = NULL;
    sysdata.NO_NAME_RESOLVING = TRUE;
    sysdata.WAIT_FOR_AUTH = TRUE;
 
@@ -719,8 +712,11 @@ void accept_new( int ctrl )
    FD_SET( ctrl, &in_set );
    maxdesc = ctrl;
    newdesc = 0;
-   for( d = first_descriptor; d; d = d->next )
-   {
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++)
+     {
+      d = *iter;  
       maxdesc = UMAX( maxdesc, d->descriptor );
       FD_SET( d->descriptor, &in_set );
       FD_SET( d->descriptor, &out_set );
@@ -730,9 +726,7 @@ void accept_new( int ctrl )
          maxdesc = UMAX( maxdesc, d->ifd );
          FD_SET( d->ifd, &in_set );
       }
-      if( d == last_descriptor )
-         break;
-   }
+     }
 
    if( select( maxdesc + 1, &in_set, &out_set, &exc_set, &null_time ) < 0 )
    {
@@ -782,14 +776,11 @@ void game_loop( void )
        * Kick out descriptors with raised exceptions
        * or have been idle, then check for input.
        */
-      for( d = first_descriptor; d; d = d_next )
-      {
-         if( d == d->next )
-         {
-            bug( "descriptor_loop: loop found & fixed" );
-            d->next = NULL;
-         }
-         d_next = d->next;
+       for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+            iter != descriptor_list.end(); 
+            )
+       {
+        d = *iter++;    // increment now in case descriptor deleted
 
          d->idle++;  /* make it so a descriptor can idle out */
          if( FD_ISSET( d->descriptor, &exc_set ) )
@@ -844,13 +835,13 @@ void game_loop( void )
             }
 
             read_from_buffer( d );
-            if( d->incomm[0] != '\0' )
+            if( !d->incomm.empty () )
             {
                d->fcommand = TRUE;
                stop_idling( d->character );
 
-               mudstrlcpy( cmdline, d->incomm, MAX_INPUT_LENGTH );
-               d->incomm[0] = '\0';
+               mudstrlcpy( cmdline, d->incomm.c_str (), MAX_INPUT_LENGTH );
+               d->incomm.erase ();
 
                if( d->character )
                   set_cur_char( d->character );
@@ -872,8 +863,6 @@ void game_loop( void )
                   }
             }
          }
-         if( d == last_descriptor )
-            break;
       }
 
 #ifdef IMC
@@ -888,9 +877,11 @@ void game_loop( void )
       /*
        * Output.
        */
-      for( d = first_descriptor; d; d = d_next )
-      {
-         d_next = d->next;
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+          )
+     {
+        d = *iter++;    // increment now in case descriptor deleted
 
          if( ( d->fcommand || d->outtop > 0 ) && FD_ISSET( d->descriptor, &out_set ) )
          {
@@ -912,8 +903,6 @@ void game_loop( void )
                close_socket( d, FALSE );
             }
          }
-         if( d == last_descriptor )
-            break;
       }
 
       /*
@@ -1026,8 +1015,7 @@ void new_descriptor( int new_desc )
    if( check_bad_desc( new_desc ) )
       return;
 
-   CREATE( dnew, DESCRIPTOR_DATA, 1 );
-   dnew->next = NULL;
+   dnew = new DESCRIPTOR_DATA;
    dnew->descriptor = desc;
    dnew->connected = CON_GET_NAME;
    dnew->outsize = 2000;
@@ -1072,17 +1060,8 @@ void new_descriptor( int new_desc )
     * Init descriptor data.
     */
 
-   if( !last_descriptor && first_descriptor )
-   {
-      DESCRIPTOR_DATA *d;
-
-      bug( "New_descriptor: last_desc is NULL, but first_desc is not! ...fixing" );
-      for( d = first_descriptor; d; d = d->next )
-         if( !d->next )
-            last_descriptor = d;
-   }
-
-   LINK( dnew, first_descriptor, last_descriptor, next, prev );
+   descriptor_list.push_back (dnew);
+   
 
    /*
     * MCCP Compression 
@@ -1105,8 +1084,8 @@ void new_descriptor( int new_desc )
          send_to_desc_color( help_greeting, dnew );
    }
 
-   if( ++num_descriptors > sysdata.maxplayers )
-      sysdata.maxplayers = num_descriptors;
+   if( (int) descriptor_list.size () > sysdata.maxplayers )
+      sysdata.maxplayers = descriptor_list.size ();
    if( sysdata.maxplayers > sysdata.alltimemax )
    {
       if( sysdata.time_of_max )
@@ -1132,7 +1111,7 @@ void free_desc( DESCRIPTOR_DATA * d )
       DISPOSE( d->pagebuf );
    compressEnd( d );
    DISPOSE( d->mccp );
-   DISPOSE( d );
+   delete d;
    return;
 }
 
@@ -1140,7 +1119,6 @@ void close_socket( DESCRIPTOR_DATA * dclose, bool force )
 {
    CHAR_DATA *ch;
    DESCRIPTOR_DATA *d;
-   bool DoNotUnlink = FALSE;
 
    if( dclose->ipid != -1 )
    {
@@ -1167,9 +1145,14 @@ void close_socket( DESCRIPTOR_DATA * dclose, bool force )
    /*
     * stop snooping everyone else 
     */
-   for( d = first_descriptor; d; d = d->next )
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+          iter++ )
+     {
+      d = *iter;
       if( d->snoop_by == dclose )
          d->snoop_by = NULL;
+      }
 
    /*
     * Check for switched people who go link-dead. -- Altrag 
@@ -1189,59 +1172,7 @@ void close_socket( DESCRIPTOR_DATA * dclose, bool force )
 
    ch = dclose->character;
 
-   /*
-    * sanity check :( 
-    */
-   if( !dclose->prev && dclose != first_descriptor )
-   {
-      DESCRIPTOR_DATA *dp, *dn;
-      bug( "Close_socket: %s desc:%p != first_desc:%p and desc->prev = NULL!",
-           ch ? ch->name : d->host, ( void * )dclose, ( void * )first_descriptor );
-      dp = NULL;
-      for( d = first_descriptor; d; d = dn )
-      {
-         dn = d->next;
-         if( d == dclose )
-         {
-            bug( "Close_socket: %s desc:%p found, prev should be:%p, fixing.", ch ? ch->name : d->host, ( void * )dclose,
-                 ( void * )dp );
-            dclose->prev = dp;
-            break;
-         }
-         dp = d;
-      }
-      if( !dclose->prev )
-      {
-         bug( "%s: %s desc:%p could not be found!.", __FUNCTION__, ch ? ch->name : dclose->host, ( void * )dclose );
-         DoNotUnlink = TRUE;
-      }
-   }
-
-   if( !dclose->next && dclose != last_descriptor )
-   {
-      DESCRIPTOR_DATA *dp, *dn;
-      bug( "Close_socket: %s desc:%p != last_desc:%p and desc->next = NULL!",
-           ch ? ch->name : d->host, ( void * )dclose, ( void * )last_descriptor );
-      dn = NULL;
-      for( d = last_descriptor; d; d = dp )
-      {
-         dp = d->prev;
-         if( d == dclose )
-         {
-            bug( "%s: %s desc:%p found, next should be:%p, fixing.", __FUNCTION__, ch ? ch->name : d->host, ( void * )dclose,
-                 ( void * )dn );
-            dclose->next = dn;
-            break;
-         }
-         dn = d;
-      }
-      if( !dclose->next )
-      {
-         bug( "%s: %s desc:%p could not be found!.", __FUNCTION__, ch ? ch->name : dclose->host, ( void * )dclose );
-         DoNotUnlink = TRUE;
-      }
-   }
-
+ 
    if( dclose->character )
    {
       log_printf_plus( LOG_COMM, UMAX( sysdata.log_level, ch->level ), "Closing link to %s.", ch->pcdata->filename );
@@ -1270,56 +1201,27 @@ void close_socket( DESCRIPTOR_DATA * dclose, bool force )
       }
    }
 
-   if( !DoNotUnlink )
-   {
-      /*
-       * make sure loop doesn't get messed up 
-       */
-      if( d_next == dclose )
-         d_next = d_next->next;
-      UNLINK( dclose, first_descriptor, last_descriptor, next, prev );
-   }
-
-   compressEnd( dclose );
+   // remove from list
+   descriptor_list.remove_if (std::bind2nd (std::equal_to<DESCRIPTOR_DATA *> (), dclose));
 
    if( dclose->descriptor == maxdesc )
       --maxdesc;
 
    free_desc( dclose );
-   --num_descriptors;
    return;
 }
 
 
 bool read_from_descriptor( DESCRIPTOR_DATA * d )
 {
-   unsigned int iStart;
    int iErr;
-
-   /*
-    * Hold horses if pending command already. 
-    */
-   if( d->incomm[0] != '\0' )
-      return TRUE;
-
-   /*
-    * Check for overflow. 
-    */
-   iStart = strlen( d->inbuf );
-   if( iStart >= sizeof( d->inbuf ) - 10 )
-   {
-      log_printf( "%s input overflow!", d->host );
-      write_to_descriptor( d,
-                           "\r\n*** PUT A LID ON IT!!! ***\r\nYou cannot enter the same command more than 20 consecutive times!\r\n",
-                           0 );
-      return FALSE;
-   }
+   char buf [1024];  // whatever, it doesn't matter
 
    for( ;; )
    {
       int nRead;
 
-      nRead = recv( d->descriptor, d->inbuf + iStart, sizeof( d->inbuf ) - 10 - iStart, 0 );
+      nRead = recv( d->descriptor, buf, sizeof( buf ), 0 );
 #ifdef WIN32
       iErr = WSAGetLastError(  );
 #else
@@ -1327,9 +1229,7 @@ bool read_from_descriptor( DESCRIPTOR_DATA * d )
 #endif
       if( nRead > 0 )
       {
-         iStart += nRead;
-         if( d->inbuf[iStart - 1] == '\n' || d->inbuf[iStart - 1] == '\r' )
-            break;
+         d->inbuf += std::string (buf, nRead);
       }
       else if( nRead == 0 )
       {
@@ -1345,143 +1245,326 @@ bool read_from_descriptor( DESCRIPTOR_DATA * d )
       }
    }
 
-   d->inbuf[iStart] = '\0';
    return TRUE;
 }
 
+
+void process_client_request ( DESCRIPTOR_DATA * d )
+  {
+  char name [100];
+  long long value;
+  
+  int i = sscanf(d->telnet.c_str (), "%99s = \"%Ld\"", name, &value );
+
+  if (i < 2) 
+    return;
+    
+  char buf[MAX_STRING_LENGTH];
+  
+  std::map<GUID,OBJ_DATA *>::iterator iter = guid_object_map.find (value);
+ 
+  if (iter == guid_object_map.end ())
+     {
+     snprintf(buf, sizeof (buf), 
+             "\xFF\xFA\x66"         // IAC SB 102
+             "obj_info={"
+             "guid=\"%lld\";"
+             "info=false;}"
+             "\xFF\xF0",            // IAC SE
+             value  // GUID
+             );  
+    } // if not found
+  else
+    {
+    OBJ_DATA *obj = iter->second;
+    CHAR_DATA * ch = d->character;
+    if (ch)
+      {
+      char * pDesc = fixup_lua_strings (format_obj_to_char( obj, ch, FALSE ));
+      snprintf(buf, sizeof (buf), 
+               "\xFF\xFA\x66"         // IAC SB 102
+               "obj_info={"
+               "guid=\"%lld\";"
+               "info={dsc=%s;}"
+               "} \xFF\xF0",        // IAC SE
+               value,  // GUID
+               pDesc
+               );  
+      free (pDesc);
+      }
+    
+    } // if found
+    
+    write_to_buffer (d, buf, 0);
+    
+  } // end of process_client_request
+
+
+
 /*
  * Transfer one line from input buffer to input line.
+ 
+ Totally rewritten by Nick Gammon.
+ 21 February 2010.
+ 
  */
+ 
+class is_unprintable : public std::unary_function<char, char>
+  {
+  public:
+   bool operator ()(const char & t) const
+   {
+    return (! (isascii(t) || isprint(t))) || t == '\r';
+   }
+  };
+   
 void read_from_buffer( DESCRIPTOR_DATA * d )
 {
-   int i, j, k, iac = 0;
+  
 
-   /*
-    * Hold horses if pending command already.
-    */
-   if( d->incomm[0] != '\0' )
-      return;
 
-   /*
-    * Look for at least one new line.
-    */
-   for( i = 0; d->inbuf[i] != '\n' && d->inbuf[i] != '\r' && i < MAX_INBUF_SIZE; i++ )
-   {
-      if( d->inbuf[i] == '\0' )
-         return;
-   }
-
-   /*
-    * Canonical input processing.
-    */
-   for( i = 0, k = 0; d->inbuf[i] != '\n' && d->inbuf[i] != '\r'; i++ )
-   {
-      if( k >= 254 )
-      {
-         write_to_descriptor( d, "Line too long.\r\n", 0 );
-
-         /*
-          * skip the rest of the line 
-          */
-         /*
-          * for ( ; d->inbuf[i] != '\0' || i>= MAX_INBUF_SIZE ; i++ )
-          * {
-          * if ( d->inbuf[i] == '\n' || d->inbuf[i] == '\r' )
-          * break;
-          * }
-          */
-         d->inbuf[i] = '\n';
-         d->inbuf[i + 1] = '\0';
-         break;
-      }
-
-      if( d->inbuf[i] == ( signed char )IAC )
-         iac = 1;
-      else if( iac == 1
-               && ( d->inbuf[i] == ( signed char )DO || d->inbuf[i] == ( signed char )DONT
-                    || d->inbuf[i] == ( signed char )WILL ) )
-         iac = 2;
-      else if( iac == 2 )
-      {
-         iac = 0;
-         if( d->inbuf[i] == ( signed char )TELOPT_COMPRESS2 )
-         {
-            if( d->inbuf[i - 1] == ( signed char )DO )
-               compressStart( d );
-            else if( d->inbuf[i - 1] == ( signed char )DONT )
-               compressEnd( d );
-         }
-         else if( d->inbuf[i] == ( signed char )MUD_SPECIFIC )
-         {
-            if( d->inbuf[i - 1] == ( signed char )DO )
-               {
-               d->want_server_status = true;
-               write_to_descriptor(d, "\xFF\xFA\x66 version=1.0;\xFF\xF0", 0);
-               // define bar colours
-               write_to_descriptor(d, "\xFF\xFA\x66 hint={stats={"        // hint for stats colours
-                                      "HP={clr=\"darkgreen\",seq=1;};"    // hp
-                                      "Mana={clr=\"mediumblue\",seq=2};"  // mana 
-                                      "Move={clr=\"gold\",seq=3};"        // movement
-                                      "}};"                               // end stats
-                                      "\xFF\xF0", 0);
+   std::string::size_type i;
+  
+   while (true) 
+       {
+     switch (d->telnet_state)
+       {
+       case TELNET_NONE:
+           {
+           // find a newline or an IAC, whichever comes first
+           i = d->inbuf.find_first_of ("\n\xFF");
+           if (i == std::string::npos)
+              {
+              d->intext += d->inbuf;   // plain text, append to buffer
+              d->inbuf.erase ();
+              return;  
+              }  // end of neither newline nor IAC
+              
+           if (d->inbuf [i] == (char) IAC)
+             {
+             d->telnet_state = TELNET_IAC;  
+             d->intext +=  d->inbuf.substr (0, i);  // plain text up to the IAC
+             d->inbuf.erase (0, i + 1);  // erase the plain text, and the IAC 
+             break;   // we have switched states
+             }
+            
+           // must be newline
+            
+           d->intext +=  d->inbuf.substr (0, i);  // plain text up to the newline
+           d->inbuf.erase (0, i + 1);  // erase the plain text, and the newline 
+           d->incomm = d->intext;      // becomes current command
+           d->intext.erase ();         // ready for new one
+           
+           // get rid of backspaces
+           while ((i = d->incomm.find_first_of ("\b") != std::string::npos))
+             {
+             if (i > 0) 
+               d->incomm.erase (i - 1, 2);  // delete character and one behind it
+             else
+               d->incomm.erase (0, 1);  // line starts with backspace, get rid of it
+             }
+           
+           // remove non printables from string
+           std::string::iterator iter;
+           d->incomm.erase (remove_if (d->incomm.begin(), d->incomm.end(), is_unprintable()), d->incomm.end ());
+  
+           // check not too long
+           if (d->incomm.size () > 254)
+             {
+             write_to_descriptor( d, "Line too long.\r\n", 0 );
+             d->incomm.erase (); 
+             break; 
+             }
+          
+           if (d->incomm.empty ())
+              d->incomm = " ";
+           else
+             {
+             if (d->incomm != "!" && d->incomm != d->inlast)
+                d->repeat = 0;  // they stopped repeating
+             else
+              if( ++d->repeat >= 20 )
+                {
+                write_to_descriptor( d,
+                                     "\r\n*** PUT A LID ON IT!!! ***\r\nYou cannot enter the same command more than 20 consecutive times!\r\n",
+                                     0 );
+                d->incomm = "quit";
                }
-            else if( d->inbuf[i - 1] == ( signed char )DONT )
-               d->want_server_status = false;
-         }
-      }
-      else if( d->inbuf[i] == '\b' && k > 0 )
-         --k;
-      else if( isascii( d->inbuf[i] ) && isprint( d->inbuf[i] ) )
-         d->incomm[k++] = d->inbuf[i];
-   }
-
-   /*
-    * Finish off the line.
-    */
-   if( k == 0 )
-      d->incomm[k++] = ' ';
-   d->incomm[k] = '\0';
-
-   /*
-    * Deal with bozos with #repeat 1000 ...
-    */
-   if( k > 1 || d->incomm[0] == '!' )
-   {
-      if( d->incomm[0] != '!' && strcmp( d->incomm, d->inlast ) )
-      {
-         d->repeat = 0;
-      }
-      else
-      {
-         if( ++d->repeat >= 20 )
+             }  // if not empty
+                        
+          // ! repeats last command
+          // if ! not entered, remember last command
+          if( d->incomm == "!")
+            d->incomm = d->inlast;
+          else
+            d->inlast = d->incomm;
+                
+           return;                     // may as well process command         
+             
+           }  // end of TELNET_NONE
+         
+        case TELNET_IAC:
+          {
+          unsigned char c =  d->inbuf [0];
+          d->inbuf.erase (0, 1);  // pull out the IAC
+          switch (c)
+            {  
+            case WILL: d->telnet_state = TELNET_WILL; break;
+            case WONT: d->telnet_state = TELNET_WONT; break;
+            case DO:   d->telnet_state = TELNET_DO;   break;
+            case DONT: d->telnet_state = TELNET_DONT; break;
+            case SB:   d->telnet_state = TELNET_SB;   break;
+            default: 
+               d->telnet_state = TELNET_NONE; break;  // unrecognized
+            } // end of switch on what follows the IAC
+           break; 
+         }   // end of TELNET_IAC
+         
+        case TELNET_WILL:
          {
-/*		log_printf( "%s input spamming!", d->host );
-*/
-            write_to_descriptor( d,
-                                 "\r\n*** PUT A LID ON IT!!! ***\r\nYou cannot enter the same command more than 20 consecutive times!\r\n",
-                                 0 );
-            mudstrlcpy( d->incomm, "quit", MAX_INPUT_LENGTH );
-         }
-      }
-   }
-
-   /*
-    * Do '!' substitution.
-    */
-   if( d->incomm[0] == '!' )
-      mudstrlcpy( d->incomm, d->inlast, MAX_INPUT_LENGTH );
-   else
-      mudstrlcpy( d->inlast, d->incomm, MAX_INPUT_LENGTH );
-
-   /*
-    * Shift the input buffer.
-    */
-   while( d->inbuf[i] == '\n' || d->inbuf[i] == '\r' )
-      i++;
-   for( j = 0; ( d->inbuf[j] = d->inbuf[i + j] ) != '\0'; j++ )
-      ;
-   return;
-}
+          unsigned char c = d->inbuf [0];
+          d->inbuf.erase (0, 1);  // pull out the code
+          
+          // handle WILL c here
+          switch (c)
+            {
+            default:
+              break;
+            }
+          
+           // whatever, we are back to no state
+           d->telnet_state = TELNET_NONE; 
+         }   // end of TELNET_WILL
+         break; 
+               
+       case TELNET_WONT:
+         {
+          unsigned char c = d->inbuf [0];
+          d->inbuf.erase (0, 1);  // pull out the code
+          
+          // handle WONT c here
+          switch (c)
+            {
+            default:
+              break;
+            }
+            
+           // whatever, we are back to no state
+           d->telnet_state = TELNET_NONE; 
+         }   // end of TELNET_WONT
+         break; 
+                
+      case TELNET_DO:
+         {
+          unsigned char c = d->inbuf [0];
+          d->inbuf.erase (0, 1);  // pull out the code
+          
+          // handle DO c here
+            
+          switch (c)
+            {
+            case TELOPT_COMPRESS2:  
+              compressStart( d );
+              break;
+            
+            case MUD_SPECIFIC:
+                {
+                 d->want_server_status = true;
+                 write_to_descriptor(d, "\xFF\xFA\x66 version=1.0;\xFF\xF0", 0);
+                 // define bar colours
+                 write_to_descriptor(d, "\xFF\xFA\x66 hint={stats={"        // hint for stats colours
+                                        "HP={clr=\"darkgreen\",seq=1;};"    // hp
+                                        "Mana={clr=\"mediumblue\",seq=2};"  // mana 
+                                        "Move={clr=\"gold\",seq=3};"        // movement
+                                        "}};"                               // end stats
+                                        "\xFF\xF0", 0);
+                 }
+               break;
+                         
+            }  // end of switch on type
+           // whatever, we are back to no state
+           d->telnet_state = TELNET_NONE; 
+         }   // end of TELNET_DO
+         break; 
+                
+     case TELNET_DONT:
+         {
+          unsigned char c = d->inbuf [0];
+          d->inbuf.erase (0, 1);  // pull out the code
+          
+          // handle DONT c here
+            
+          switch (c)
+            {
+            case TELOPT_COMPRESS2:  
+              compressEnd( d );
+              break;
+            
+            case MUD_SPECIFIC:
+               d->want_server_status = false;
+               break;
+                       
+            }  // end of switch on type
+            
+           // whatever, we are back to no state
+           d->telnet_state = TELNET_NONE; 
+         }   // end of TELNET_DONT
+         break; 
+                   
+         
+       case TELNET_SB:
+          {
+          d->telnet_sb_type = d->inbuf [0];
+          d->inbuf.erase (0, 1);  // pull out the code
+          d->telnet_state = TELNET_SUBNEGOTIATION; 
+          d->telnet.erase ();  // no subnegotiation data yet
+          }   // end of TELNET_SB
+          break; 
+  
+       case TELNET_SUBNEGOTIATION:
+          {
+           // find an IAC
+           i = d->inbuf.find_first_of ("\xFF");
+           if (i == std::string::npos)
+              {
+              d->telnet += d->inbuf;   // append to subnegotiation buffer
+              d->inbuf.erase ();
+              return;  
+              }  // end of no IAC found - still doing subnegotiation
+              
+           d->telnet_state = TELNET_SUBNEGOTIATION_IAC;  
+           d->telnet +=  d->inbuf.substr (0, i);  // subnegotiation up to the IAC
+           d->inbuf.erase (0, i + 1);  // erase the subnegotiation text, and the IAC 
+           }  // end of TELNET_SUBNEGOTIATION
+           break;   // we have switched states
+  
+       case TELNET_SUBNEGOTIATION_IAC:
+          {
+          unsigned char c = d->inbuf [0];
+          d->inbuf.erase (0, 1);  // pull out the code
+          
+          if (c == IAC)
+            {
+            d->telnet += c;  // add single IAC to buffer
+            d->telnet_state = TELNET_SUBNEGOTIATION;   // back to standard subnegotiation
+            break;            
+            }
+          // have to assume SE, even if it isn't
+          
+          d->telnet_state = TELNET_NONE; 
+  
+          // handle subnegotiation here   
+          switch (d->telnet_sb_type)
+            {
+            case 102: process_client_request (d); break;
+              
+            }  // end of switch on type    
+          }   // end of TELNET_SUBNEGOTIATION_IAC
+          break; 
+          
+     }  // end of switch
+  } // end of while (true)
+}  // end of read_from_buffer
 
 /*
  * Low level output function.
@@ -2835,8 +2918,11 @@ bool check_playing( DESCRIPTOR_DATA * d, const char *name, bool kick )
    DESCRIPTOR_DATA *dold;
    int cstate;
 
-   for( dold = first_descriptor; dold; dold = dold->next )
+   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+        iter != descriptor_list.end(); 
+        iter++ )
    {
+      dold = *iter;
       if( dold != d
           && ( dold->character || dold->original )
           && !str_cmp( name, dold->original ? dold->original->pcdata->filename : dold->character->pcdata->filename ) )
@@ -3691,7 +3777,7 @@ void display_prompt( DESCRIPTOR_DATA * d )
                      pstat = 0;
                   break;
                case 'u':
-                  pstat = num_descriptors;
+                  pstat = descriptor_list.size ();
                   break;
                case 'U':
                   pstat = sysdata.maxplayers;
@@ -3902,7 +3988,6 @@ void show_status( CHAR_DATA *ch )
              group
              );
          
-             
     // combat info
     if (victim)
       {
@@ -3937,7 +4022,7 @@ void show_status( CHAR_DATA *ch )
    // finish telnet negotiation after the combat info
    strncpy(&buf [strlen (buf)], "\xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
              
-   send_to_char( buf, ch );
+   write_to_buffer (ch->desc, buf, 0);
            
 }  // end of show_status
 
@@ -4049,3 +4134,11 @@ void bailout( void )
 }
 
 #endif
+
+GUID makeguid ()  // get a new GUID
+  {
+  static GUID _guid = 0;
+  return ++_guid;
+  }
+ 
+ 

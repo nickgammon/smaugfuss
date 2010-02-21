@@ -100,12 +100,17 @@ void advance_level( CHAR_DATA * ch )
    {
       DESCRIPTOR_DATA *d;
 
-      for( d = first_descriptor; d; d = d->next )
+       for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+            iter != descriptor_list.end(); 
+            iter++ )
+       {
+         d = *iter;
          if( d->connected == CON_PLAYING && d->character != ch )
          {
             set_char_color( AT_IMMORT, d->character );
             ch_printf( d->character, "%s has just achieved Avatarhood!\r\n", ch->name );
          }
+       }
       set_char_color( AT_WHITE, ch );
       do_help( ch, "M_ADVHERO_" );
    }
@@ -1650,7 +1655,7 @@ void char_check( void )
  */
 void aggr_update( void )
 {
-   DESCRIPTOR_DATA *d, *dnext;
+   DESCRIPTOR_DATA *d;
    TRV_DATA *lc;
    CHAR_DATA *wch, *ch, *vch, *victim;
    struct act_prog_data *apdtmp;
@@ -1686,9 +1691,11 @@ void aggr_update( void )
     * Just check descriptors here for victims to aggressive mobs
     * We can check for linkdead victims in char_check   -Thoric
     */
-   for( d = first_descriptor; d; d = dnext )
-   {
-      dnext = d->next;
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+           )
+     {
+      d = *iter++;
       if( ( d->connected != CON_PLAYING && d->connected != CON_EDITING ) || ( wch = d->character ) == NULL )
          continue;
 
@@ -1933,8 +1940,11 @@ void auth_update( void )
    bool found_hit = FALSE; /* was at least one found? */
 
    mudstrlcpy( log_buf, "Pending authorizations:\r\n", MAX_STRING_LENGTH );
-   for( d = first_descriptor; d; d = d->next )
-   {
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+          iter++ )
+     {
+        d = *iter;
       if( ( victim = d->character ) && IS_WAITING_FOR_AUTH( victim ) )
       {
          found_hit = TRUE;
@@ -2306,8 +2316,11 @@ void time_update( void )
        || time_info.hour == sysdata.hournoon || time_info.hour == sysdata.hoursunset
        || time_info.hour == sysdata.hournightbegin )
    {
-      for( d = first_descriptor; d; d = d->next )
-      {
+       for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+            iter != descriptor_list.end(); 
+            iter++ )
+       {
+          d = *iter;
          if( d->connected == CON_PLAYING && IS_OUTSIDE( d->character ) && IS_AWAKE( d->character ) )
          {
             struct WeatherCell *cell = getWeatherCell( d->character->in_room->area );
@@ -2441,8 +2454,11 @@ void hint_update(  )
 
    if( time_info.hour % 1 == 0 )
    {
-      for( d = first_descriptor; d; d = d->next )
-      {
+       for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+            iter != descriptor_list.end(); 
+            iter++ )
+       {
+          d = *iter;
          if( d->connected == CON_PLAYING && IS_AWAKE( d->character ) && d->character->pcdata )
          {
             if( IS_SET( d->character->pcdata->flags, PCFLAG_HINTS ) && number_bits( 1 ) == 0 )

@@ -151,8 +151,11 @@ void WeatherMessage( const char *txt, int x, int y )
    {
       if( pArea->weatherx == x && pArea->weathery == y )
       {
-         for( d = first_descriptor; d; d = d->next )
-         {
+           for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+                iter != descriptor_list.end(); 
+                iter++ )
+           {
+              d = *iter;
             if( d->connected == CON_PLAYING )
             {
                if( d->character && ( d->character->in_room->area == pArea ) && IS_OUTSIDE( d->character )

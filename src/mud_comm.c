@@ -1336,8 +1336,11 @@ void do_mptransfer( CHAR_DATA* ch, const char* argument)
     */
    if( !str_cmp( arg1, "area" ) )
    {
-      for( d = first_descriptor; d; d = d->next )
-      {
+     for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
+          iter != descriptor_list.end(); 
+          iter++ )
+     {
+        d = *iter;
          if( !d->character || ( d->connected != CON_PLAYING && d->connected != CON_EDITING )
              || ch->in_room->area != d->character->in_room->area )
             continue;
