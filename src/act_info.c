@@ -5122,7 +5122,6 @@ void send_inroom_info ( CHAR_DATA* ch)
 
    if (!(blind || dark))
      {
-     char *pDesc;
      int iCount = 0;
      OBJ_DATA *obj;
                   
@@ -5157,9 +5156,9 @@ void send_inroom_info ( CHAR_DATA* ch)
         if( can_see( ch, rch ) && !IS_NPC( rch ))
           {
           iCount++;  
-          pDesc = fixup_lua_strings (rch->name);
           const char * pFighting = "false";
-          const char * pFightWho = NULL;
+          GUID fightwho = 0;
+          CHAR_DATA * pWho = NULL;
           switch (rch->position)
           {
            case POS_FIGHTING:
@@ -5168,19 +5167,15 @@ void send_inroom_info ( CHAR_DATA* ch)
            case POS_AGGRESSIVE:
            case POS_BERSERK:
               pFighting = "true"; 
-              if (who_fighting( rch ) == ch)
-                pFightWho = "YOU!";
-              else
-                pFightWho = PERS (who_fighting( rch ), ch);                    
+              pWho = who_fighting( rch );
+              if (pWho)
+                fightwho = pWho->guid;                  
               break;
           } // end of switch
-          char * pFightWhoFixed = fixup_lua_strings (pFightWho);
           snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
-                  "[%i]={dsc=%s;lvl=%i;fight=%s;target=%s;me=%s};", 
-                  iCount, pDesc, rch->level, pFighting, pFightWhoFixed,
+                    "[%i]={guid=\"%lld\";lvl=%i;fight=%s;target=\"%lld\";me=%s};", 
+                    iCount, rch->guid, rch->level, pFighting, fightwho,  
                   TRUE_OR_FALSE (rch == ch));  
-          free (pDesc);
-          free (pFightWhoFixed);
           }
       }    // end of for each character
 
@@ -5198,10 +5193,9 @@ void send_inroom_info ( CHAR_DATA* ch)
         if( can_see( ch, rch ) && IS_NPC( rch ))
           {
           iCount++;  
-          pDesc = fixup_lua_strings (rch->long_descr);
           const char * pFighting = "false";
-          const char * pFightWho = NULL;
-          const char * pAggressive = "false";
+          GUID fightwho = 0;
+          CHAR_DATA * pWho = NULL;
           switch (rch->position)
           {
            case POS_FIGHTING:
@@ -5210,21 +5204,15 @@ void send_inroom_info ( CHAR_DATA* ch)
            case POS_AGGRESSIVE:
            case POS_BERSERK:
               pFighting = "true"; 
-              if (who_fighting( rch ) == ch)
-                pFightWho = "YOU!";
-              else
-                pFightWho = PERS (who_fighting( rch ), ch);                    
+              pWho = who_fighting( rch );
+              if (pWho)
+                fightwho = pWho->guid;                  
               break;
           } // end of switch
-          char * pFightWhoFixed = fixup_lua_strings (pFightWho);
-          
-          if( xIS_SET( rch->act, ACT_AGGRESSIVE ) || xIS_SET( rch->act, ACT_META_AGGR ) )
-            pAggressive = "true";
+         
           snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
-                  "[%i]={dsc=%s;lvl=%i;fight=%s;target=%s;aggro=%s};", 
-                    iCount, pDesc, rch->level, pFighting, pFightWhoFixed, pAggressive);  
-          free (pDesc);
-          free (pFightWhoFixed);
+                  "[%i]={guid=\"%lld\";lvl=%i;fight=%s;target=\"%lld\";};", 
+                    iCount, rch->guid, rch->level, pFighting, fightwho);  
           }
       }    // end of for each npc
            

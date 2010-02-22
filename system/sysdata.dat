@@ -1,7 +1,7 @@
 #SYSTEM
 MudName	     (Name Not Set)~
-Highplayers    2
-Highplayertime Sat Jul  7 23:54:56 2007~
+Highplayers    3
+Highplayertime Mon Feb 22 12:43:38 2010~
 CheckImmHost   1
 Nameresolving  1
 Waitforauth    0
@@ -42,6 +42,13 @@ BanClassLevel  61
 MorphOpt       1
 PetSave	     1
 Pkloot	     1
+Maxholiday     0
+Secpertick     70
+Pulsepersec    4
+Hoursperday    24
+Daysperweek    7
+Dayspermonth   31
+Monthsperyear  17
 End
 
 #END

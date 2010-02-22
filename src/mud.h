@@ -801,6 +801,12 @@ public:
      mccp (NULL), 
      can_compress (false), 
      host (NULL),
+     port (0),
+     descriptor (0),
+     connected (0),
+     idle (0),
+     lines (0),
+     scrlen (0),
      fcommand (false),
      telnet_sb_type (0),
      telnet_state (TELNET_NONE),
@@ -814,6 +820,10 @@ public:
      pagepoint (NULL), 
      pagecmd (0),
      pagecolor (0),
+     newstate (0),
+     prevcolor (0),
+     ifd (0),
+     ipid (0),
      want_server_status (false) {};
      
    DESCRIPTOR_DATA *snoop_by;
@@ -837,6 +847,7 @@ public:
    std::string incomm;   // currently-assembled command
    std::string inlast;   // their last command
    std::list<GUID> object_info_wanted;  // guids of objects client wants info on
+   std::list<GUID> char_info_wanted;    // guids of NPCs and players client wants info on
    int repeat;
    char *outbuf;
    unsigned long outsize;
@@ -2354,6 +2365,7 @@ struct char_data
    int home_vnum; /* hotboot tracker */
    int resetvnum;
    int resetnum;
+   GUID guid;   // unique ID - stored in guid_char_map
 };
 
 struct killed_data
@@ -2552,7 +2564,7 @@ struct obj_data
    short count;   /* support for object grouping */
    int serial; /* serial number         */
    int room_vnum; /* hotboot tracker */
-   GUID guid;  // unique ID
+   GUID guid;  // unique ID - stored in guid_object_map
 };
 
 /*
@@ -5126,3 +5138,4 @@ struct DeleteObject
   };
 
 extern std::map<GUID, OBJ_DATA *> guid_object_map;
+extern std::map<GUID, CHAR_DATA *> guid_char_map;

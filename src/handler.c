@@ -4698,6 +4698,7 @@ void free_obj( OBJ_DATA * obj )
    STRFREE( obj->description );
    STRFREE( obj->short_descr );
    STRFREE( obj->action_desc );
+   STRFREE( obj->owner );
    
    std::map<GUID,OBJ_DATA *>::iterator i = guid_object_map.find (obj->guid);
    if (i != guid_object_map.end ())

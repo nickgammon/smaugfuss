@@ -809,6 +809,8 @@ bool load_char_obj( DESCRIPTOR_DATA * d, char *name, bool preload, bool copyover
    ch->pcdata->lt_index = 0;  /* last tell index */
    ch->morph = NULL;
    ch->pcdata->hotboot = FALSE;  /* Never changed except when PC is saved during hotboot save */
+   ch->guid = makeguid ();
+   guid_char_map [ch->guid] = ch;
 
 #ifdef IMC
    imc_initchar( ch );

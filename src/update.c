@@ -2476,8 +2476,6 @@ void hint_update(  )
 }
 
 
-
-
 std::string build_object_info (DESCRIPTOR_DATA * d, const GUID guid)
 {
 
@@ -2523,6 +2521,45 @@ char buf[MAX_STRING_LENGTH];
     return std::string (buf);
   } // end of build_object_info
   
+std::string build_char_info (DESCRIPTOR_DATA * d, const GUID guid)
+{
+
+char buf[MAX_STRING_LENGTH];
+  
+  std::map<GUID,CHAR_DATA *>::iterator iter = guid_char_map.find (guid);
+ 
+  if (iter == guid_char_map.end ())
+     snprintf(buf, sizeof (buf), "[\"%lld\"]=false;", guid);  
+  else
+    {
+    CHAR_DATA * ch = iter->second;
+   
+    char * pName        = fixup_lua_strings (ch->name);
+    char * pShort       = fixup_lua_strings (ch->short_descr);
+    char * pDesc        = fixup_lua_strings (ch->description);
+    char * pLongDesc  = fixup_lua_strings (ch->long_descr);
+
+    snprintf(buf, sizeof (buf), 
+             "[\"%lld\"]="
+             "{name=%s;short=%s;dsc=%s;longdsc=%s;"
+             "level=%i;};",
+             guid, 
+             pName,
+             pShort,
+             pDesc,
+             pLongDesc,
+             ch->level
+             );  
+    free (pName);
+    free (pShort);
+    free (pDesc);
+    free (pLongDesc);
+        
+    } // if found
+    
+    return std::string (buf);
+  } // end of build_char_info
+    
 #define MAX_GUIDS_TO_SEND_AT_ONCE 10
 
 void send_guid_info ( void)
@@ -2540,33 +2577,66 @@ DESCRIPTOR_DATA * d;
     if (!d->character)
       continue;
       
-    std::string sResult = "\xFF\xFA\x66 obj_info={";  // IAC SB 102
+    std::string sResult = "\xFF\xFA\x66"; // IAC SB 102
     int iCount = 0;
-    
-    // send up to MAX_GUIDS_TO_SEND_AT_ONCE pieces of info at a time
-    for (int i = 0; i < MAX_GUIDS_TO_SEND_AT_ONCE; i++)
+    int i;
+
+    if (!d->object_info_wanted.empty ())
       {
-      // if any ...
-      if (d->object_info_wanted.empty ())
-        break;   // none to send
+      sResult += "obj_info={";  
         
-      // get oldest item
-      GUID guid (d->object_info_wanted.front ());
-      d->object_info_wanted.pop_front ();  
-      
-      // one more in the list
-      sResult += build_object_info (d, guid); 
-      iCount++; 
-      
-      // remove any identical ones from the list to save sending twice
-      d->object_info_wanted.remove_if (std::bind2nd (std::equal_to<GUID> (), guid));
-      
-      } // end of for loop
+      // send up to MAX_GUIDS_TO_SEND_AT_ONCE pieces of info at a time
+      for (i = 0; i < MAX_GUIDS_TO_SEND_AT_ONCE; i++)
+        {
+        // if any ...
+        if (d->object_info_wanted.empty ())
+          break;   // none to send
+          
+        // get oldest item
+        GUID guid (d->object_info_wanted.front ());
+        d->object_info_wanted.pop_front ();  
+        
+        // one more in the list
+        sResult += build_object_info (d, guid); 
+        iCount++; 
+        
+        // remove any identical ones from the list to save sending twice
+        d->object_info_wanted.remove_if (std::bind2nd (std::equal_to<GUID> (), guid));
+        
+        } // end of for loop
+      sResult += "};";
+      }   // end of wanted list not empty
     
+    if (!d->char_info_wanted.empty ())
+      {
+      sResult += "char_info={";  
+      
+      // send up to MAX_GUIDS_TO_SEND_AT_ONCE pieces of info at a time
+      for (i = 0; i < MAX_GUIDS_TO_SEND_AT_ONCE; i++)
+        {
+        // if any ...
+        if (d->char_info_wanted.empty ())
+          break;   // none to send
+          
+        // get oldest item
+        GUID guid (d->char_info_wanted.front ());
+        d->char_info_wanted.pop_front ();  
+        
+        // one more in the list
+        sResult += build_char_info (d, guid); 
+        iCount++; 
+        
+        // remove any identical ones from the list to save sending twice
+        d->char_info_wanted.remove_if (std::bind2nd (std::equal_to<GUID> (), guid));
+        
+        } // end of for loop
+      sResult += "};";
+      } // end of wanted list not empty
+                
     // anything?
     if (iCount > 0)  
       {  
-      sResult += "} \xFF\xF0";  // IAC SE 
+      sResult += "\xFF\xF0";  // IAC SE 
       write_to_buffer (d, sResult.c_str (), 0);
       }
       

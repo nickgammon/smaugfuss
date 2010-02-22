@@ -47,6 +47,8 @@ WIZENT *first_wiz;
 WIZENT *last_wiz;
 
 std::map<GUID,OBJ_DATA *> guid_object_map;
+std::map<GUID, CHAR_DATA *> guid_char_map;
+
 
 time_t last_restore_all_time = 0;
 
@@ -2657,6 +2659,9 @@ CHAR_DATA *create_mobile( MOB_INDEX_DATA * pMobIndex )
    mob->home_vnum = -1;
    mob->resetvnum = -1;
    mob->resetnum = -1;
+   mob->guid = makeguid ();
+   guid_char_map [mob->guid] = mob;
+
 
    if( xIS_SET( mob->act, ACT_MOBINVIS ) )
       mob->mobinvis = mob->level;
@@ -3110,6 +3115,12 @@ void free_char( CHAR_DATA * ch )
       STRFREE( comments->date );
       DISPOSE( comments );
    }
+   
+   // get rid of it from GUID map
+   std::map<GUID,CHAR_DATA *>::iterator i = guid_char_map.find (ch->guid);
+   if (i != guid_char_map.end ())
+     guid_char_map.erase (i);
+   
    DISPOSE( ch );
    return;
 }

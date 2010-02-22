@@ -269,10 +269,10 @@ void cleanup_memory( void )
     */
    fprintf( stdout, "%s", "Descriptors.\n" );
    
-    // delete all objects in list
-    std::for_each (descriptor_list.begin (), descriptor_list.end (), DeleteObject ());
-    // now delete them from the list
-    descriptor_list.clear ();
+   // delete all objects in list
+   std::for_each (descriptor_list.begin (), descriptor_list.end (), DeleteObject ());
+   // now delete them from the list
+   descriptor_list.clear ();
     
    /*
     * Liquids 
@@ -1263,6 +1263,8 @@ void process_client_request ( DESCRIPTOR_DATA * d )
   
   if (sName == "obj_info")
     d->object_info_wanted.push_back (guid);
+  else if (sName == "char_info")
+    d->char_info_wanted.push_back (guid);
     
   } // end of process_client_request
 
