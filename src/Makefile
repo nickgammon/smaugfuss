@@ -20,7 +20,7 @@ IMC = 1
 
 W_FLAGS = -Wall -Werror -Wshadow -Wformat-security -Wpointer-arith -Wcast-align -Wredundant-decls
 
-C_FLAGS = -g2 $(W_FLAGS) $(SOLARIS_FLAG) $(PROF) $(EXPORT_SYMBOLS)
+C_FLAGS = -g2 $(W_FLAGS) $(SOLARIS_FLAG) $(PROF) $(EXPORT_SYMBOLS) -fno-inline 
 L_FLAGS = $(PROF) $(SOLARIS_LINK) -lz $(NEED_DL)
 #D_FLAGS : For the DNS Slave process. No need in linking all the extra libs for this.
 D_FLAGS = -g2 -O $(PROF) $(SOLARIS_LINK)

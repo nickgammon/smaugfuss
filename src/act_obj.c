@@ -571,10 +571,10 @@ void do_get( CHAR_DATA* ch, const char* argument)
             if( fAll )
             {
                if( container->item_type == ITEM_KEYRING && !IS_OBJ_STAT( container, ITEM_COVERING ) )
-                  act( AT_PLAIN, "The $T holds no keys.", ch, NULL, arg2, TO_CHAR );
+                  act( AT_PLAIN, "$T holds no keys.", ch, NULL, container->short_descr, TO_CHAR );
                else
                   act( AT_PLAIN, IS_OBJ_STAT( container, ITEM_COVERING ) ?
-                       "I see nothing beneath the $T." : "I see nothing in the $T.", ch, NULL, arg2, TO_CHAR );
+                       "I see nothing beneath $T." : "I see nothing in $T.", ch, NULL, container->short_descr, TO_CHAR );
             }
             else
             {

@@ -1104,12 +1104,12 @@ void new_descriptor( int new_desc )
 
 void free_desc( DESCRIPTOR_DATA * d )
 {
+   compressEnd( d );
    close( d->descriptor );
    STRFREE( d->host );
    DISPOSE( d->outbuf );
    if( d->pagebuf )
       DISPOSE( d->pagebuf );
-   compressEnd( d );
    DISPOSE( d->mccp );
    delete d;
    return;
@@ -1248,7 +1248,7 @@ bool read_from_descriptor( DESCRIPTOR_DATA * d )
    return TRUE;
 }
 
-
+ 
 void process_client_request ( DESCRIPTOR_DATA * d )
   {
   char name [100];
@@ -1265,6 +1265,8 @@ void process_client_request ( DESCRIPTOR_DATA * d )
     d->object_info_wanted.push_back (guid);
   else if (sName == "char_info")
     d->char_info_wanted.push_back (guid);
+  else if (sName == "room_info")
+    d->room_info_wanted.push_back (guid);
     
   } // end of process_client_request
 

@@ -2810,7 +2810,19 @@ CHAR_DATA *get_char_room( CHAR_DATA * ch, const char *argument )
    char arg[MAX_INPUT_LENGTH];
    CHAR_DATA *rch;
    int number, count, vnum;
-
+   GUID guid;
+   
+   number = sscanf(argument, "<%Ld>", &guid );
+   
+   if (number == 1 && guid > 0)
+     {
+     for( rch = ch->in_room->first_person; rch; rch = rch->next_in_room )
+       if( can_see( ch, rch ) && rch->guid == guid )
+            return rch;
+     
+     return NULL;
+     }
+        
    number = number_argument( argument, arg );
    if( !str_cmp( arg, "self" ) )
       return ch;
@@ -2956,7 +2968,19 @@ OBJ_DATA *get_obj_list( CHAR_DATA * ch, char *argument, OBJ_DATA * list )
    OBJ_DATA *obj;
    int number;
    int count;
-
+   GUID guid;
+   
+   number = sscanf(argument, "<%Ld>", &guid );
+   
+   if (number == 1 && guid > 0)
+     {
+     for( obj = list; obj; obj = obj->next_content )
+       if( can_see_obj( ch, obj ) && obj->guid == guid )
+            return obj;
+     
+     return NULL;
+     }
+   
    number = number_argument( argument, arg );
    count = 0;
    for( obj = list; obj; obj = obj->next_content )
@@ -2987,7 +3011,19 @@ OBJ_DATA *get_obj_list_rev( CHAR_DATA * ch, const char *argument, OBJ_DATA * lis
    OBJ_DATA *obj;
    int number;
    int count;
-
+   GUID guid;
+   
+   number = sscanf(argument, "<%Ld>", &guid );
+   
+   if (number == 1 && guid > 0)
+     {
+     for( obj = list; obj; obj = obj->prev_content )
+       if( can_see_obj( ch, obj ) && obj->guid == guid )
+            return obj;
+     
+     return NULL;
+     }
+   
    number = number_argument( argument, arg );
    count = 0;
    for( obj = list; obj; obj = obj->prev_content )

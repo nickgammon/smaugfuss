@@ -5114,8 +5114,7 @@ void send_inroom_info ( CHAR_DATA* ch)
              "\xFF\xFA\x66"         // IAC SB 102
              "inroom={"
              "blind=%s;"            // character blind?
-             "dark=%s;"            // room dark?
-             "objects={",
+             "dark=%s;",            // room dark?
              TRUE_OR_FALSE (blind),
              TRUE_OR_FALSE (dark)
              );  
@@ -5124,7 +5123,9 @@ void send_inroom_info ( CHAR_DATA* ch)
      {
      int iCount = 0;
      OBJ_DATA *obj;
-                  
+                 
+     strncpy(&buf [strlen (buf)], "objects={", sizeof (buf) - strlen (buf));  
+      
      // OBJECTS
      
      for( obj = ch->in_room->first_content; obj; obj = obj->next_content )
@@ -5216,7 +5217,7 @@ void send_inroom_info ( CHAR_DATA* ch)
           }
       }    // end of for each npc
            
-    // end of characters table
+    // end of npcs table
     strncpy(&buf [strlen (buf)], "};", sizeof (buf) - strlen (buf));  
     
     } // not blind or dark

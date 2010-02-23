@@ -147,11 +147,8 @@ bool compressEnd( DESCRIPTOR_DATA * d )
    d->mccp->out_compress->avail_in = 0;
    d->mccp->out_compress->next_in = dummy;
 
-   if( deflate( d->mccp->out_compress, Z_FINISH ) != Z_STREAM_END )
-      return FALSE;
-
-   if( !process_compressed( d ) )   /* try to send any residual data */
-      return FALSE;
+   if( deflate( d->mccp->out_compress, Z_FINISH ) == Z_STREAM_END )
+      process_compressed( d );   /* try to send any residual data */
 
    deflateEnd( d->mccp->out_compress );
    DISPOSE( d->mccp->out_compress_buf );

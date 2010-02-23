@@ -848,6 +848,7 @@ public:
    std::string inlast;   // their last command
    std::list<GUID> object_info_wanted;  // guids of objects client wants info on
    std::list<GUID> char_info_wanted;    // guids of NPCs and players client wants info on
+   std::list<GUID> room_info_wanted;    // guids of rooms client wants info on
    int repeat;
    char *outbuf;
    unsigned long outsize;
