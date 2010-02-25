@@ -1,0 +1,2 @@
+ valgrind --gen-suppressions=yes --leak-check=yes  --show-reachable=yes ../src/smaug 4020
+

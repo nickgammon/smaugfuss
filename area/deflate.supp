@@ -1,0 +1,48 @@
+#
+#  Added by Nick Gammon to fix up MCCP problems
+#
+
+{
+   zlib problems - SmaugFUSS MCCP stuff
+   Memcheck:Cond
+   fun:memcpy
+   obj:/usr/lib/libz.so.1.2.*
+   ...
+   obj:/usr/lib/libz.so.1.2.*
+   fun:deflate
+   ...
+   fun:main
+}
+
+{
+   zlib problems - SmaugFUSS MCCP stuff
+   Memcheck:Value4
+   fun:memcpy
+   obj:/usr/lib/libz.so.1.2.*
+   ...
+   obj:/usr/lib/libz.so.1.2.*
+   fun:deflate
+   ...
+   fun:main
+}
+
+{
+   zlib problems - SmaugFUSS MCCP stuff
+   Memcheck:Param
+   socketcall.send(msg)
+   obj:/lib/ld-2.8.90.so
+   fun:_Z12flush_bufferP15descriptor_datab
+   ...
+   fun:_Z9game_loopv
+   fun:main
+}
+
+{
+   zlib problems - SmaugFUSS MCCP stuff
+   Memcheck:Cond
+   fun:deflate
+   ...
+   fun:main
+}
+
+
