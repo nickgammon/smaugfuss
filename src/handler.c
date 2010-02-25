@@ -63,20 +63,16 @@ TRV_WORLD trw_heap[TRW_MAXHEAP];
 
 #define UTF8_ENCODE
 
-char * fixup_lua_strings (const char * sce)
+std::string fixup_lua_strings (const char * sce)
   {
+  if (sce == NULL)
+    return "nil";
+  
   const char * p;
   char * dest;
   char * pd;
-  int count = 3;  // allow for quotes and final 0x00 at end
+  int count = 2;  // allow for quotes 
   unsigned char c;
-  
-  if (sce == NULL)
-    {
-    dest = (char *) malloc (strlen ("nil") + 1);
-    strcpy (dest, "nil");  
-    return dest;
-    }
 
   // first work out how much memory to allocate
   for (p = sce; *p; p++, count++)
@@ -151,9 +147,11 @@ char * fixup_lua_strings (const char * sce)
      }   /* end of copying */
   
   *pd++ = '"';  // closing quote
-  *pd = 0;      // terminating 0x00
   
-  return dest;
+  std::string sResult (dest, count);
+  free (dest);
+  
+  return sResult;
 }
 
 TRV_DATA *trvch_create( CHAR_DATA * ch, trv_type tp )
@@ -1904,12 +1902,12 @@ void char_to_room( CHAR_DATA * ch, ROOM_INDEX_DATA * pRoomIndex )
                  room_is_dark( ch->in_room );
      
      snprintf(buf, sizeof (buf), 
-               "\xFF\xFA\x66"         // IAC SB 102
+               START_TELNET_SUBNEG    // IAC SB 102
                "move={"               // move table
                "guid=\"%i\";"         // guid
                "blind=%s;"            // character blind?
                "dark=%s;}"            // room dark?
-               "\xFF\xF0",            // IAC SE
+               END_TELNET_SUBNEG,            // IAC SE
                ch->in_room->vnum,     // guid (vnum)
                TRUE_OR_FALSE (blind),
                TRUE_OR_FALSE (dark)

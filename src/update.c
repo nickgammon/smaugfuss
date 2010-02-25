@@ -2489,6 +2489,25 @@ void hint_update(  )
    }
 }
 
+/*
+
+Object GUID sending routines.
+
+Author: Nick Gammon
+Date: 25 February 2010
+
+Note re data mining: With the client being able to request, via telnet negotiation, information
+about any GUID, this could be abused by someone who scripted a request for every possible room,
+object or character in the MUD.
+
+To prevent this, requests will be denied if the character (at the time the request is processed) is
+not in the room of the requested object/character/room or the requested item is not in an adjacent 
+room.
+
+The adjacent room provision is to allow for players who may enter a room and quickly move to the next 
+one, before the "room info" request is processed, or perhaps loot a mob, and then move to another room.
+
+*/
 
 std::string build_object_info (DESCRIPTOR_DATA * d, const GUID guid)
 {
@@ -2503,40 +2522,68 @@ char buf[MAX_STRING_LENGTH];
     {
     OBJ_DATA * obj = iter->second;
    
-    char * pName        = fixup_lua_strings (obj->name);
-    char * pShort       = fixup_lua_strings (obj->short_descr);
-    char * pDesc        = fixup_lua_strings (obj->description);
-    char * pActionDesc  = fixup_lua_strings (obj->action_desc);
-    char * pType        = fixup_lua_strings (o_types [obj->item_type]);
-
-    snprintf(buf, sizeof (buf), 
-             "[\"%lld\"]={"   // guid
-             "name=%s;"
-             "short=%s;"
-             "dsc=%s;"
-             "lookdsc=%s;"
-             "typ=%s;"
-             "wear=%i;"
-             "weight=%i;"
-             "cost=%i;"
-             "level=%i;};",
-             guid, 
-             pName,
-             pShort,
-             pDesc,
-             pActionDesc,
-             pType,
-             obj->wear_loc,
-             obj->weight,
-             obj->cost,
-             obj->level
-             );  
-    free (pName);
-    free (pShort);
-    free (pDesc);
-    free (pActionDesc);
-    free (pType);
+    // to prevent data mining, see if object is nearby
     
+    OBJ_DATA *nearbyObj;
+
+    // in room?     
+    for( nearbyObj = d->character->in_room->first_content; nearbyObj; nearbyObj = nearbyObj->next_content )
+      if (obj == nearbyObj)
+        break;   // found in current room
+        
+    // this rooms's exits
+    EXIT_DATA *pexit;
+    
+    // not in room? check adjacent rooms    
+    if (nearbyObj == NULL)
+      for( pexit = d->character->in_room->first_exit; pexit; pexit = pexit->next )
+       {
+       if( pexit->to_room )
+         {
+         for( nearbyObj = pexit->to_room->first_content; nearbyObj; nearbyObj = nearbyObj->next_content )
+           if (obj == nearbyObj)
+             break;  // found in adjacent room
+         }  // end of exit room exists
+        // if found in that room, don't check any more rooms
+        if (obj == nearbyObj)
+          break;
+            
+       }  // end of for each exit
+              
+    // in player inventory?
+    if (nearbyObj == NULL)
+      for( nearbyObj = d->character->first_carrying; nearbyObj; nearbyObj = nearbyObj->next_content )
+        if (obj == nearbyObj)
+          break;
+   
+    // tell him not found if it isn't nearyby 
+    if (nearbyObj == NULL)
+     snprintf(buf, sizeof (buf), "[\"%lld\"]=false;", guid);  
+    else
+      {    
+      snprintf(buf, sizeof (buf), 
+               "[\"%lld\"]={"   // guid
+               "name=%s;"
+               "short=%s;"
+               "dsc=%s;"
+               "lookdsc=%s;"
+               "typ=%s;"
+               "wear=%i;"
+               "weight=%i;"
+               "cost=%i;"
+               "level=%i;};",
+               guid, 
+               fixup_lua_strings (obj->name).c_str (),
+               fixup_lua_strings (obj->short_descr).c_str (),
+               fixup_lua_strings (obj->description).c_str (),
+               fixup_lua_strings (obj->action_desc).c_str (),
+               fixup_lua_strings (o_types [obj->item_type]).c_str (),
+               obj->wear_loc,
+               obj->weight,
+               obj->cost,
+               obj->level
+               );  
+      }  // end of object nearby to us
     } // if found
     
     return std::string (buf);
@@ -2555,30 +2602,55 @@ char buf[MAX_STRING_LENGTH];
     {
     CHAR_DATA * ch = iter->second;
    
-    char * pName        = fixup_lua_strings (ch->name);
-    char * pShort       = fixup_lua_strings (ch->short_descr);
-    char * pDesc        = fixup_lua_strings (ch->description);
-    char * pLongDesc  = fixup_lua_strings (ch->long_descr);
+    
+    // to prevent data mining, see if character is nearby
+    
+    CHAR_DATA *nearbyChar;
 
-    snprintf(buf, sizeof (buf), 
-             "[\"%lld\"]={"     // guid
-             "name=%s;"
-             "short=%s;"
-             "dsc=%s;"
-             "longdsc=%s;"
-             "level=%i;};",
-             guid, 
-             pName,
-             pShort,
-             pDesc,
-             pLongDesc,
-             ch->level
-             );  
-    free (pName);
-    free (pShort);
-    free (pDesc);
-    free (pLongDesc);
+    // in room?     
+    for( nearbyChar = d->character->in_room->first_person; nearbyChar; nearbyChar = nearbyChar->next_in_room )
+      if (ch == nearbyChar)
+        break;   // found in current room
         
+    // this rooms's exits
+    EXIT_DATA *pexit;
+    
+    // not in room? check adjacent rooms    
+    if (nearbyChar == NULL)
+      for( pexit = d->character->in_room->first_exit; pexit; pexit = pexit->next )
+       {
+       if( pexit->to_room )
+         {
+         for( nearbyChar = pexit->to_room->first_person; nearbyChar; nearbyChar = nearbyChar->next_in_room )
+           if (ch == nearbyChar)
+             break;  // found in adjacent room
+         }  // end of exit room exists
+        // if found in that room, don't check any more rooms
+        if (ch == nearbyChar)
+          break;
+            
+       }  // end of for each exit
+    
+    // tell him not found if it isn't nearyby 
+    if (nearbyChar == NULL)
+     snprintf(buf, sizeof (buf), "[\"%lld\"]=false;", guid);  
+    else
+      {    
+      snprintf(buf, sizeof (buf), 
+               "[\"%lld\"]={"     // guid
+               "name=%s;"
+               "short=%s;"
+               "dsc=%s;"
+               "longdsc=%s;"
+               "level=%i;};",
+               guid, 
+               fixup_lua_strings (ch->name).c_str (),
+               fixup_lua_strings (ch->short_descr).c_str (),
+               fixup_lua_strings (ch->description).c_str (),
+               fixup_lua_strings (ch->long_descr).c_str (),
+               ch->level
+               );  
+      }  // end of character nearby to us  
     } // if found
     
     return std::string (buf);
@@ -2588,7 +2660,9 @@ static const char *const short_dir_name[] = {
    "n", "e", "s", "w", "u", "d",
    "ne", "nw", "se", "sw", "somewhere"
 };
-  
+
+extern const char *const sec_flags[];
+
 std::string build_room_info (DESCRIPTOR_DATA * d, const GUID guid)
 {
 
@@ -2600,66 +2674,95 @@ char buf[MAX_STRING_LENGTH];
      snprintf(buf, sizeof (buf), "[\"%lld\"]=false;", guid);  
   else
     {
-        
-    char * pName = fixup_lua_strings (room->name);
-    char * pDescription = fixup_lua_strings (room->description);
+    // this rooms's exits
     EXIT_DATA *pexit;
+        
+    // to prevent data mining, see if room is nearby
     
-    // see if shop
-    CHAR_DATA *pMob;
-    bool bShop = false, bTrainer = false, bRepair = false, bHealer = false;
-    
-    for( pMob = room->first_person; pMob; pMob = pMob->next_in_room )
-      if( IS_NPC( pMob ) )
-        {
-        if (pMob->pIndexData->pShop) 
-          bShop = true;
-        if (pMob->pIndexData->rShop) 
-          bRepair = true;
-        if (xIS_SET( pMob->act, ACT_PRACTICE ) )
-          bTrainer = true;
-        if (pMob->spec_fun && (strcmp (pMob->spec_funname, "spec_cast_adept") == 0 ||
-                               strcmp (pMob->spec_funname, "spec_cast_cleric") == 0))
-          bHealer = true;
-        }
-    
-    snprintf(buf, sizeof (buf), 
-           "[\"%lld\"]={"     // guid (vnum)
-           "name=%s;"
-           "desc=%s;" 
-           "shop=%s;"
-           "train=%s;"
-           "repair=%s;"
-           "healer=%s;"
-           "exits={",
-           guid,
-           pName,
-           pDescription,
-           TRUE_OR_FALSE (bShop),
-           TRUE_OR_FALSE (bTrainer),
-           TRUE_OR_FALSE (bRepair),
-           TRUE_OR_FALSE (bHealer)
-         );
-    free (pName); 
-    free (pDescription); 
+    ROOM_INDEX_DATA *nearbyRoom = NULL;
+
+    // want info on current room?
+    if (d->character->in_room == room)
+       nearbyRoom = room;
        
-    for( pexit = room->first_exit; pexit; pexit = pexit->next )
-     {
-        if( pexit->to_room
-            && ( !IS_SET( pexit->exit_info, EX_WINDOW )
-               || IS_SET( pexit->exit_info, EX_ISDOOR ) ) && !IS_SET( pexit->exit_info, EX_HIDDEN ) )
-        {
-         // WARNING - I assume dir_name gives names that are valid Lua names (which it currently does)
-         //  if not you would need to use fixup_lua_strings and do something like: "[%s]=%i;"
-         snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
-           "%s=\"%i\";",          // n="12345"
-           short_dir_name[pexit->vdir],
-           pexit->vnum
-           );
-        }
-     }  // end for each exit        
-     strncpy(&buf [strlen (buf)], "}};",  sizeof (buf) - strlen (buf)); 
+    // not in room? check adjacent rooms    
+    if (nearbyRoom == NULL)
+      for( pexit = d->character->in_room->first_exit; pexit; pexit = pexit->next )
+       {
+       if (pexit->to_room == room)
+         {
+         nearbyRoom = room;
+         break;  // found in adjacent room
+         }  // end of exit room exists and is the correct room
+         
+        // if found in that room, don't check any more rooms
+        if (room == nearbyRoom)
+          break;
+            
+       }  // end of for each exit
+
+    if (nearbyRoom == NULL)
+     snprintf(buf, sizeof (buf), "[\"%lld\"]=false;", guid);  
+    else
+      {
+      // see if shop
+      CHAR_DATA *pMob;
+      bool bShop = false, bTrainer = false, bRepair = false, bHealer = false;
+      
+      for( pMob = room->first_person; pMob; pMob = pMob->next_in_room )
+        if( IS_NPC( pMob ) )
+          {
+          if (pMob->pIndexData->pShop) 
+            bShop = true;
+          if (pMob->pIndexData->rShop) 
+            bRepair = true;
+          if (xIS_SET( pMob->act, ACT_PRACTICE ) )
+            bTrainer = true;
            
+          // not sure about this ...
+          if (pMob->spec_fun && (strcmp (pMob->spec_funname, "spec_cast_adept") == 0 ||
+                                 strcmp (pMob->spec_funname, "spec_cast_cleric") == 0))
+            bHealer = true;
+          }
+      
+      snprintf(buf, sizeof (buf), 
+             "[\"%lld\"]={"     // guid (vnum)
+             "name=%s;"
+             "desc=%s;" 
+             "shop=%s;"
+             "train=%s;"
+             "repair=%s;"
+             "healer=%s;"
+             "terrain=%s;"
+             "exits={",
+             guid,
+             fixup_lua_strings (room->name).c_str (),
+             fixup_lua_strings (room->description).c_str (),
+             TRUE_OR_FALSE (bShop),
+             TRUE_OR_FALSE (bTrainer),
+             TRUE_OR_FALSE (bRepair),
+             TRUE_OR_FALSE (bHealer),
+             fixup_lua_strings (sec_flags [room->sector_type]).c_str ()
+             
+           );
+         
+      for( pexit = room->first_exit; pexit; pexit = pexit->next )
+       {
+          if( pexit->to_room
+              && ( !IS_SET( pexit->exit_info, EX_WINDOW )
+                 || IS_SET( pexit->exit_info, EX_ISDOOR ) ) && !IS_SET( pexit->exit_info, EX_HIDDEN ) )
+          {
+           // WARNING - I assume dir_name gives names that are valid Lua names (which it currently does)
+           //  if not you would need to use fixup_lua_strings and do something like: "[%s]=%i;"
+           snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
+             "%s=\"%i\";",          // n="12345"
+             short_dir_name[pexit->vdir],
+             pexit->vnum
+             );
+          }
+       }  // end for each exit        
+       strncpy(&buf [strlen (buf)], "}};",  sizeof (buf) - strlen (buf)); 
+      }   // end of room nearby to us  
     } // if found
     
    return std::string (buf);
@@ -2705,7 +2808,7 @@ void build_cached_list (DESCRIPTOR_DATA * d,                  // which descripti
     }   // end of wanted list not empty
 } // end of build_cached_list
 
-bool write_to_descriptor( DESCRIPTOR_DATA * d, const char *txt, int length );
+// bool write_to_descriptor( DESCRIPTOR_DATA * d, const char *txt, int length );
 
 void send_guid_info ( void)
 {
@@ -2718,7 +2821,7 @@ void send_guid_info ( void)
     
     if (d->character)
       {      
-      std::string sResult = "\xFF\xFA\x66"; // IAC SB 102
+      std::string sResult = START_TELNET_SUBNEG; // IAC SB 102
       int iCount = 0;
   
       build_cached_list (d, d->object_info_wanted, "obj_info",  sResult, iCount, &build_object_info);
@@ -2728,7 +2831,7 @@ void send_guid_info ( void)
       // anything?
       if (iCount > 0)  
         {  
-        sResult += "\xFF\xF0";  // IAC SE 
+        sResult += END_TELNET_SUBNEG;  // IAC SE 
         write_to_buffer (d, sResult.c_str (), sResult.size ());  // maybe: write_to_descriptor
         } // end if anything found
       }   // end if descriptor has a character

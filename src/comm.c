@@ -1446,14 +1446,14 @@ void read_from_buffer( DESCRIPTOR_DATA * d )
             case MUD_SPECIFIC:
                 {
                  d->want_server_status = true;
-                 write_to_descriptor(d, "\xFF\xFA\x66 version=1.0;\xFF\xF0", 0);
+                 write_to_descriptor(d, START_TELNET_SUBNEG " version=1.0;" END_TELNET_SUBNEG, 0);
                  // define bar colours
-                 write_to_descriptor(d, "\xFF\xFA\x66 hint={stats={"        // hint for stats colours
+                 write_to_descriptor(d, START_TELNET_SUBNEG " hint={stats={"        // hint for stats colours
                                         "HP={clr=\"darkgreen\",seq=1;};"    // hp
                                         "Mana={clr=\"mediumblue\",seq=2};"  // mana 
                                         "Move={clr=\"gold\",seq=3};"        // movement
                                         "}};"                               // end stats
-                                        "\xFF\xF0", 0);
+                                        END_TELNET_SUBNEG, 0);
                  }
                break;
                          
@@ -1532,7 +1532,7 @@ void read_from_buffer( DESCRIPTOR_DATA * d )
           // handle subnegotiation here   
           switch (d->telnet_sb_type)
             {
-            case 102: process_client_request (d); break;
+            case TELNET_SUBNEG_CODE: process_client_request (d); break;
               
             }  // end of switch on type    
           }   // end of TELNET_SUBNEGOTIATION_IAC
@@ -3851,15 +3851,10 @@ void show_status( CHAR_DATA *ch )
      {
        
      
-     char * pName = fixup_lua_strings (IS_NPC( gch ) ? gch->short_descr : gch->name);
      CHAR_DATA *master = gch->master;
      const char * pMasterName = NULL;
      if (master)
        pMasterName = IS_NPC( master ) ? master->short_descr : master->name;
-    
-     char * pFollowingName = fixup_lua_strings (pMasterName);
-       
-     char * pPosition = fixup_lua_strings (char_position [gch->position]);
      
      iCount++;       
        snprintf(&group [strlen (group)], sizeof (group) - strlen (group), 
@@ -3878,9 +3873,9 @@ void show_status( CHAR_DATA *ch )
                "combat=%s;"           // in combat or not
                "position=%s;",        // position (eg. standing, dead, sleeping)
                iCount,
-               pName,                  // name
+               fixup_lua_strings (IS_NPC( gch ) ? gch->short_descr : gch->name).c_str (),                  // name
                TRUE_OR_FALSE (gch == ch),  // if true, this is me!
-               pFollowingName,         // who we are following
+               fixup_lua_strings (pMasterName).c_str (),         // who we are following
                TRUE_OR_FALSE (gch->leader == NULL),
                gch->hit,               // HP
                gch->max_hit,
@@ -3892,17 +3887,13 @@ void show_status( CHAR_DATA *ch )
                exp_level( gch, gch->level + 1 )- exp_level( gch, gch->level),
                gch->level,
                (gch->fighting && gch->fighting->who) ? "true" : "false",
-               pPosition
+               fixup_lua_strings (char_position [gch->position]).c_str ()
                );
-      free (pName); 
-      free (pFollowingName); 
-      free (pPosition); 
        
       if( gch->first_affect )
        {
        AFFECT_DATA *paf;
        SKILLTYPE *sktmp;
-       char * pAffectName;
       
        strncpy(&group [strlen (group)], "buffs={", sizeof (group) - strlen (group)); 
        for( paf = gch->first_affect; paf; paf = paf->next )
@@ -3910,12 +3901,8 @@ void show_status( CHAR_DATA *ch )
          sktmp = get_skilltype( paf->type );
          if (sktmp && sktmp->target != TAR_CHAR_OFFENSIVE)
             {
-            pAffectName = fixup_lua_strings (sktmp->name);
-            
             snprintf(&group [strlen (group)], sizeof (group) - strlen (group), 
-                 "%s;", pAffectName);
-                           
-            free (pAffectName); 
+                 "%s;", fixup_lua_strings (sktmp->name).c_str ());
             } // name found
            
          } // end for loop
@@ -3926,7 +3913,6 @@ void show_status( CHAR_DATA *ch )
        {
        AFFECT_DATA *paf;
        SKILLTYPE *sktmp;
-       char * pAffectName;
       
        strncpy(&group [strlen (group)], "debuffs={", sizeof (group) - strlen (group)); 
        for( paf = gch->first_affect; paf; paf = paf->next )
@@ -3934,12 +3920,10 @@ void show_status( CHAR_DATA *ch )
          sktmp = get_skilltype( paf->type );
          if (sktmp && sktmp->target == TAR_CHAR_OFFENSIVE)
             {
-            pAffectName = fixup_lua_strings (sktmp->name);
-            
+           
             snprintf(&group [strlen (group)], sizeof (group) - strlen (group), 
-                 "%s;", pAffectName);
+                 "%s;", fixup_lua_strings (sktmp->name).c_str ());
                            
-            free (pAffectName); 
             } // name found
            
          } // end for loop
@@ -3959,7 +3943,7 @@ void show_status( CHAR_DATA *ch )
     
    char buf[MAX_STRING_LENGTH];
    snprintf(buf, sizeof (buf), 
-             "\xFF\xFA\x66"         // IAC SB 102
+             START_TELNET_SUBNEG     // IAC SB 102
              "group={%s};",          // group members
              group
              );
@@ -3968,7 +3952,6 @@ void show_status( CHAR_DATA *ch )
     if (victim)
       {
        const char * p = "You";
-       char * pName;
        
        if (ch != victim)
          {
@@ -3977,8 +3960,6 @@ void show_status( CHAR_DATA *ch )
          else
            p = victim->name;
          }
-    
-       pName = fixup_lua_strings (p);
        
        snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
                "victim={name=%s;" // name
@@ -3987,16 +3968,15 @@ void show_status( CHAR_DATA *ch )
                "};"                   // end bar table
                "level=%d;"            // level
                "};",
-               pName,
+               fixup_lua_strings (p).c_str (),
                victim->hit,
                victim->max_hit,
                victim->level
              );
-       free (pName); 
      }
                  
    // finish telnet negotiation after the combat info
-   strncpy(&buf [strlen (buf)], "\xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
+   strncpy(&buf [strlen (buf)], END_TELNET_SUBNEG, sizeof (buf) - strlen (buf));  // IAC SE
              
    write_to_buffer (ch->desc, buf, 0);
            

@@ -4738,7 +4738,7 @@ int fread_imm_host( FILE * fp, IMMORTAL_HOST * data );
 void do_write_imm_host( void );
 
 /* handler.c */
-char * fixup_lua_strings (const char * sce);
+std::string fixup_lua_strings (const char * sce);
 void free_obj( OBJ_DATA * obj );
 CHAR_DATA *carried_by( OBJ_DATA * obj );
 AREA_DATA *get_area_obj( OBJ_INDEX_DATA * obj );
@@ -5140,3 +5140,8 @@ struct DeleteObject
 
 extern std::map<GUID, OBJ_DATA *> guid_object_map;
 extern std::map<GUID, CHAR_DATA *> guid_char_map;
+
+// This is our telnet code (102 at present) - used for client-server messages
+#define TELNET_SUBNEG_CODE 102   // NOTE: 102 is \x66 (below)
+#define START_TELNET_SUBNEG "\xFF\xFA\x66"   // IAC SB 102
+#define END_TELNET_SUBNEG   "\xFF\xF0"       // IA SE

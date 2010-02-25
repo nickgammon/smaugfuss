@@ -5111,7 +5111,7 @@ void send_inroom_info ( CHAR_DATA* ch)
                room_is_dark( ch->in_room );
    
    snprintf(buf, sizeof (buf), 
-             "\xFF\xFA\x66"         // IAC SB 102
+             START_TELNET_SUBNEG         // IAC SB 102
              "inroom={"
              "blind=%s;"            // character blind?
              "dark=%s;",            // room dark?
@@ -5223,7 +5223,7 @@ void send_inroom_info ( CHAR_DATA* ch)
     } // not blind or dark
            
   // finish telnet negotiation after all done
-  strncpy(&buf [strlen (buf)], "} \xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
+  strncpy(&buf [strlen (buf)], "} " END_TELNET_SUBNEG, sizeof (buf) - strlen (buf));  // IAC SE
   
   write_to_buffer (ch->desc, buf, 0);
              
