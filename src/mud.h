@@ -844,7 +844,7 @@ public:
    std::string telnet;   // currently-assembled telnet negotiation
    unsigned char telnet_sb_type;   // what sort of subnegotiation
    telnet_states telnet_state;     // see enum above
-   std::string incomm;   // currently-assembled command
+   std::list<std::string> incomm;   // incoming commands
    std::string inlast;   // their last command
    std::list<GUID> object_info_wanted;  // guids of objects client wants info on
    std::list<GUID> char_info_wanted;    // guids of NPCs and players client wants info on

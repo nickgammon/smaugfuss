@@ -1,55 +1,55 @@
 #CELL		  0 0
 Climate     3
 Hemisphere  1
-State       72 29 35 34 92 47 81 100
+State       100 46 14 48 70 42 93 100
 End
 
 #CELL		  1 0
 Climate     7
 Hemisphere  1
-State       19 27 36 66 76 48 100 -36
+State       50 57 13 61 73 58 65 8
 End
 
 #CELL		  2 0
 Climate     0
 Hemisphere  1
-State       22 0 26 65 47 69 100 -100
+State       10 89 8 69 75 78 94 -98
 End
 
 #CELL		  0 1
 Climate     9
 Hemisphere  0
-State       52 36 22 66 95 28 -80 -78
+State       51 100 2 69 64 28 -100 -100
 End
 
 #CELL		  1 1
 Climate     9
 Hemisphere  1
-State       59 81 23 62 81 41 100 -100
+State       100 94 10 43 70 43 84 -100
 End
 
 #CELL		  2 1
 Climate     7
 Hemisphere  1
-State       93 6 43 48 76 42 58 -100
+State       23 94 24 59 70 61 77 -100
 End
 
 #CELL		  0 2
 Climate     2
 Hemisphere  1
-State       62 63 38 21 100 39 49 -100
+State       90 49 25 34 66 24 100 -100
 End
 
 #CELL		  1 2
 Climate     3
 Hemisphere  0
-State       65 38 35 21 100 43 30 -100
+State       100 100 14 52 70 39 57 -100
 End
 
 #CELL		  2 2
 Climate     3
 Hemisphere  0
-State       53 85 31 25 100 50 -67 -100
+State       82 46 13 56 79 43 -21 -100
 End
 
 

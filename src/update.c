@@ -17,6 +17,7 @@
 
 #include <stdio.h>
 #include <sys/time.h>
+#include <string.h>
 #include "mud.h"
 #include "hint.h"
 
@@ -1958,6 +1959,19 @@ void auth_update( void )
       to_channel( log_buf, CHANNEL_AUTH, "Auth", 1 );
 }
 
+// for debugging time-related things. NJG
+void show_time (const char * pWhere)
+  {
+struct timeval sttime;
+   
+   gettimeofday( &sttime, NULL );
+   struct tm *stm;
+   stm = localtime(&sttime.tv_sec);
+   char buf [60];
+   strftime(buf, sizeof(buf), "%H:%M:%S", stm);
+   printf ("%s = %s.%06ld.\n", pWhere, buf, sttime.tv_usec);
+  }
+
 /*
  * Handle all kinds of updates.
  * Called once per pulse from game loop.
@@ -2496,9 +2510,16 @@ char buf[MAX_STRING_LENGTH];
     char * pType        = fixup_lua_strings (o_types [obj->item_type]);
 
     snprintf(buf, sizeof (buf), 
-             "[\"%lld\"]="
-             "{name=%s;short=%s;dsc=%s;lookdsc=%s;"
-             "typ=%s;wear=%i;weight=%i;cost=%i;level=%i;};",
+             "[\"%lld\"]={"   // guid
+             "name=%s;"
+             "short=%s;"
+             "dsc=%s;"
+             "lookdsc=%s;"
+             "typ=%s;"
+             "wear=%i;"
+             "weight=%i;"
+             "cost=%i;"
+             "level=%i;};",
              guid, 
              pName,
              pShort,
@@ -2540,8 +2561,11 @@ char buf[MAX_STRING_LENGTH];
     char * pLongDesc  = fixup_lua_strings (ch->long_descr);
 
     snprintf(buf, sizeof (buf), 
-             "[\"%lld\"]="
-             "{name=%s;short=%s;dsc=%s;longdsc=%s;"
+             "[\"%lld\"]={"     // guid
+             "name=%s;"
+             "short=%s;"
+             "dsc=%s;"
+             "longdsc=%s;"
              "level=%i;};",
              guid, 
              pName,
@@ -2560,87 +2584,154 @@ char buf[MAX_STRING_LENGTH];
     return std::string (buf);
   } // end of build_char_info
     
+static const char *const short_dir_name[] = {
+   "n", "e", "s", "w", "u", "d",
+   "ne", "nw", "se", "sw", "somewhere"
+};
+  
+std::string build_room_info (DESCRIPTOR_DATA * d, const GUID guid)
+{
+
+char buf[MAX_STRING_LENGTH];
+  
+  ROOM_INDEX_DATA * room = get_room_index (guid);
+
+  if (room == NULL)
+     snprintf(buf, sizeof (buf), "[\"%lld\"]=false;", guid);  
+  else
+    {
+        
+    char * pName = fixup_lua_strings (room->name);
+    char * pDescription = fixup_lua_strings (room->description);
+    EXIT_DATA *pexit;
+    
+    // see if shop
+    CHAR_DATA *pMob;
+    bool bShop = false, bTrainer = false, bRepair = false, bHealer = false;
+    
+    for( pMob = room->first_person; pMob; pMob = pMob->next_in_room )
+      if( IS_NPC( pMob ) )
+        {
+        if (pMob->pIndexData->pShop) 
+          bShop = true;
+        if (pMob->pIndexData->rShop) 
+          bRepair = true;
+        if (xIS_SET( pMob->act, ACT_PRACTICE ) )
+          bTrainer = true;
+        if (pMob->spec_fun && (strcmp (pMob->spec_funname, "spec_cast_adept") == 0 ||
+                               strcmp (pMob->spec_funname, "spec_cast_cleric") == 0))
+          bHealer = true;
+        }
+    
+    snprintf(buf, sizeof (buf), 
+           "[\"%lld\"]={"     // guid (vnum)
+           "name=%s;"
+           "desc=%s;" 
+           "shop=%s;"
+           "train=%s;"
+           "repair=%s;"
+           "healer=%s;"
+           "exits={",
+           guid,
+           pName,
+           pDescription,
+           TRUE_OR_FALSE (bShop),
+           TRUE_OR_FALSE (bTrainer),
+           TRUE_OR_FALSE (bRepair),
+           TRUE_OR_FALSE (bHealer)
+         );
+    free (pName); 
+    free (pDescription); 
+       
+    for( pexit = room->first_exit; pexit; pexit = pexit->next )
+     {
+        if( pexit->to_room
+            && ( !IS_SET( pexit->exit_info, EX_WINDOW )
+               || IS_SET( pexit->exit_info, EX_ISDOOR ) ) && !IS_SET( pexit->exit_info, EX_HIDDEN ) )
+        {
+         // WARNING - I assume dir_name gives names that are valid Lua names (which it currently does)
+         //  if not you would need to use fixup_lua_strings and do something like: "[%s]=%i;"
+         snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
+           "%s=\"%i\";",          // n="12345"
+           short_dir_name[pexit->vdir],
+           pexit->vnum
+           );
+        }
+     }  // end for each exit        
+     strncpy(&buf [strlen (buf)], "}};",  sizeof (buf) - strlen (buf)); 
+           
+    } // if found
+    
+   return std::string (buf);
+  } // end of build_room_info
+    
 #define MAX_GUIDS_TO_SEND_AT_ONCE 10
+
+// generic function to build lists of things to send, given their guid
+void build_cached_list (DESCRIPTOR_DATA * d,                  // which descriptior
+                               std::list<GUID> & guid_list,   // which list of GUIDs
+                               const std::string & ident,     // how to identify it, eg. "obj_info"
+                               std::string & sResult,         // put results here
+                               int & counter,                 // how many we put there
+                               std::string (*f) (DESCRIPTOR_DATA * d, const GUID guid)  // function to call
+                               )
+{
+
+  if (!guid_list.empty ())
+    {
+    sResult += ident;
+    sResult += "={";  
+      
+    // send up to MAX_GUIDS_TO_SEND_AT_ONCE pieces of info at a time
+    for (int i = 0; i < MAX_GUIDS_TO_SEND_AT_ONCE; i++)
+      {
+      // if any ...
+      if (guid_list.empty ())
+        break;   // none to send
+        
+      // get oldest item
+      GUID guid (guid_list.front ());
+      guid_list.pop_front ();  
+      
+      // one more in the list
+      sResult += f (d, guid); 
+      counter++; 
+      
+      // remove any identical ones from the list to save sending twice
+      guid_list.remove_if (std::bind2nd (std::equal_to<GUID> (), guid));
+      
+      } // end of for loop
+    sResult += "};";
+    }   // end of wanted list not empty
+} // end of build_cached_list
+
+bool write_to_descriptor( DESCRIPTOR_DATA * d, const char *txt, int length );
 
 void send_guid_info ( void)
 {
-DESCRIPTOR_DATA * d;
-  
   // for all connected players
   for (std::list<DESCRIPTOR_DATA * >::iterator iter = descriptor_list.begin(); 
       iter != descriptor_list.end(); 
        )
     {
-    d = *iter++;   // in case descriptor dropped from list during send
+    DESCRIPTOR_DATA * d = *iter++;   // in case descriptor dropped from list during send
     
-    // no character? forget it
-    if (!d->character)
-      continue;
-      
-    std::string sResult = "\xFF\xFA\x66"; // IAC SB 102
-    int iCount = 0;
-    int i;
-
-    if (!d->object_info_wanted.empty ())
-      {
-      sResult += "obj_info={";  
-        
-      // send up to MAX_GUIDS_TO_SEND_AT_ONCE pieces of info at a time
-      for (i = 0; i < MAX_GUIDS_TO_SEND_AT_ONCE; i++)
-        {
-        // if any ...
-        if (d->object_info_wanted.empty ())
-          break;   // none to send
-          
-        // get oldest item
-        GUID guid (d->object_info_wanted.front ());
-        d->object_info_wanted.pop_front ();  
-        
-        // one more in the list
-        sResult += build_object_info (d, guid); 
-        iCount++; 
-        
-        // remove any identical ones from the list to save sending twice
-        d->object_info_wanted.remove_if (std::bind2nd (std::equal_to<GUID> (), guid));
-        
-        } // end of for loop
-      sResult += "};";
-      }   // end of wanted list not empty
-    
-    if (!d->char_info_wanted.empty ())
-      {
-      sResult += "char_info={";  
-      
-      // send up to MAX_GUIDS_TO_SEND_AT_ONCE pieces of info at a time
-      for (i = 0; i < MAX_GUIDS_TO_SEND_AT_ONCE; i++)
-        {
-        // if any ...
-        if (d->char_info_wanted.empty ())
-          break;   // none to send
-          
-        // get oldest item
-        GUID guid (d->char_info_wanted.front ());
-        d->char_info_wanted.pop_front ();  
-        
-        // one more in the list
-        sResult += build_char_info (d, guid); 
-        iCount++; 
-        
-        // remove any identical ones from the list to save sending twice
-        d->char_info_wanted.remove_if (std::bind2nd (std::equal_to<GUID> (), guid));
-        
-        } // end of for loop
-      sResult += "};";
-      } // end of wanted list not empty
-                
-    // anything?
-    if (iCount > 0)  
-      {  
-      sResult += "\xFF\xF0";  // IAC SE 
-      write_to_buffer (d, sResult.c_str (), 0);
-      }
-      
-    } // end of each descriptor
+    if (d->character)
+      {      
+      std::string sResult = "\xFF\xFA\x66"; // IAC SB 102
+      int iCount = 0;
   
+      build_cached_list (d, d->object_info_wanted, "obj_info",  sResult, iCount, &build_object_info);
+      build_cached_list (d, d->char_info_wanted,   "char_info", sResult, iCount, &build_char_info);
+      build_cached_list (d, d->room_info_wanted,   "room_info", sResult, iCount, &build_room_info);
+                  
+      // anything?
+      if (iCount > 0)  
+        {  
+        sResult += "\xFF\xF0";  // IAC SE 
+        write_to_buffer (d, sResult.c_str (), sResult.size ());  // maybe: write_to_descriptor
+        } // end if anything found
+      }   // end if descriptor has a character
+    } // end of each descriptor
   
 } // end of send_guid_info

@@ -1906,50 +1906,15 @@ void char_to_room( CHAR_DATA * ch, ROOM_INDEX_DATA * pRoomIndex )
      snprintf(buf, sizeof (buf), 
                "\xFF\xFA\x66"         // IAC SB 102
                "move={"               // move table
+               "guid=\"%i\";"         // guid
                "blind=%s;"            // character blind?
-               "dark=%s;",            // room dark?
+               "dark=%s;}"            // room dark?
+               "\xFF\xF0",            // IAC SE
+               ch->in_room->vnum,     // guid (vnum)
                TRUE_OR_FALSE (blind),
                TRUE_OR_FALSE (dark)
                );
-     
-     // show exits if they are not blinded and it is not dark
-     if (! (blind || dark))
-       {
-       char * pName = fixup_lua_strings (ch->in_room->name);
-       EXIT_DATA *pexit;
-    
-       // if not blind or dark show them room name and vnum   
-       snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
-               "room=%d;name=%s;", // vnum, name
-               ch->in_room->vnum,
-               pName
-             );
-       free (pName); 
-       
-       strncpy(&buf [strlen (buf)], "exits={", sizeof (buf) - strlen (buf)); 
-           
-        for( pexit = ch->in_room->first_exit; pexit; pexit = pexit->next )
-         {
-            if( pexit->to_room
-                && !IS_SET( pexit->exit_info, EX_CLOSED )
-                && ( !IS_SET( pexit->exit_info, EX_WINDOW )
-                     || IS_SET( pexit->exit_info, EX_ISDOOR ) ) && !IS_SET( pexit->exit_info, EX_HIDDEN ) )
-            {
-             // WARNING - I assume dir_name gives names that are valid Lua names (which it currently does)
-             //  if not you would need to use fixup_lua_strings and do something like: "[%s]=%i;"
-             snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
-               "%s=%i;",          // north=12345
-               dir_name[pexit->vdir],
-               pexit->vnum
-               );
-            }
-         }  // end for each exit        
-       strncpy(&buf [strlen (buf)], "};",  sizeof (buf) - strlen (buf)); 
-       }  // if not blind or dark
  
-     // finish telnet negotiation after the exits
-     strncpy(&buf [strlen (buf)], "} \xFF\xF0", sizeof (buf) - strlen (buf));  // IAC SE
-     
     write_to_buffer (ch->desc, buf, 0);
    }
       

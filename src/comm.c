@@ -98,6 +98,8 @@ const char want_server_status[] = { ( char )IAC, ( char )WILL, MUD_SPECIFIC, '\0
 
 void save_sysdata( SYSTEM_DATA sys );
 
+void show_time (const char * pWhere);   // NJG
+
 /*
  * Global variables.
  */
@@ -703,6 +705,9 @@ void accept_new( int ctrl )
    static struct timeval null_time;
    DESCRIPTOR_DATA *d;
 
+   null_time.tv_usec = 0;
+   null_time.tv_sec = 0;
+            
    /*
     * Poll all active descriptors.
     */
@@ -828,20 +833,29 @@ void game_loop( void )
             if( ( d->connected == CON_PLAYING || d->character != NULL ) && d->ifd != -1 && FD_ISSET( d->ifd, &in_set ) )
                process_dns( d );
 
+            // moved up a couple of lines so we get the telnet negotiations earlier - NJG
+            // Note that read_from_buffer constructs a *list* (queue) of completed commands (ie. ending with a newline)
+            // and we now pull them out one by one when going through the loop
+            
+            read_from_buffer( d );
+
+            // this slows down processing of commands to a reasonable rate, see the WAIT_STATE macro in mud.h
             if( d->character && d->character->wait > 0 )
             {
                --d->character->wait;
                continue;
             }
 
-            read_from_buffer( d );
             if( !d->incomm.empty () )
             {
+               // pull oldest command from the queue
+               std::string command (d->incomm.front ());
+               d->incomm.pop_front ();
+               
                d->fcommand = TRUE;
                stop_idling( d->character );
 
-               mudstrlcpy( cmdline, d->incomm.c_str (), MAX_INPUT_LENGTH );
-               d->incomm.erase ();
+               mudstrlcpy( cmdline, command.c_str (), MAX_INPUT_LENGTH );
 
                if( d->character )
                   set_cur_char( d->character );
@@ -912,30 +926,21 @@ void game_loop( void )
        */
       {
          struct timeval now_time;
-         long secDelta;
-         long usecDelta;
-
          gettimeofday( &now_time, NULL );
-         usecDelta = ( ( int )last_time.tv_usec ) - ( ( int )now_time.tv_usec ) + 1000000 / PULSE_PER_SECOND;
-         secDelta = ( ( int )last_time.tv_sec ) - ( ( int )now_time.tv_sec );
-         while( usecDelta < 0 )
+         
+         long long lastTime, thisTime, wantedTime;
+         lastTime = last_time.tv_sec * 1000000 + last_time.tv_usec;  // last pulse in microseconds
+         thisTime = now_time.tv_sec * 1000000 + now_time.tv_usec;    // time now in microseconds
+         wantedTime = lastTime + 1000000 / PULSE_PER_SECOND;         // when next pulse wanted
+         
+         // do we need to wait?
+         if(wantedTime > thisTime )
          {
-            usecDelta += 1000000;
-            secDelta -= 1;
-         }
-
-         while( usecDelta >= 1000000 )
-         {
-            usecDelta -= 1000000;
-            secDelta += 1;
-         }
-
-         if( secDelta > 0 || ( secDelta == 0 && usecDelta > 0 ) )
-         {
+            long long difference = wantedTime - thisTime;
             struct timeval stall_time;
 
-            stall_time.tv_usec = usecDelta;
-            stall_time.tv_sec = secDelta;
+            stall_time.tv_usec = difference % 1000000;  // microseconds
+            stall_time.tv_sec = difference / 1000000;   // seconds
 #ifdef WIN32
             Sleep( ( stall_time.tv_sec * 1000L ) + ( stall_time.tv_usec / 1000L ) );
 #else
@@ -1245,6 +1250,7 @@ bool read_from_descriptor( DESCRIPTOR_DATA * d )
       }
    }
 
+   
    return TRUE;
 }
 
@@ -1291,9 +1297,6 @@ class is_unprintable : public std::unary_function<char, char>
    
 void read_from_buffer( DESCRIPTOR_DATA * d )
 {
-  
-
-
    std::string::size_type i;
   
    while (true) 
@@ -1319,39 +1322,41 @@ void read_from_buffer( DESCRIPTOR_DATA * d )
              break;   // we have switched states
              }
             
-           // must be newline
+           // must be newline if we get here
             
+           std::string command;  // assemble command
+           
            d->intext +=  d->inbuf.substr (0, i);  // plain text up to the newline
            d->inbuf.erase (0, i + 1);  // erase the plain text, and the newline 
-           d->incomm = d->intext;      // becomes current command
+           command = d->intext;      // becomes current command
            d->intext.erase ();         // ready for new one
            
            // get rid of backspaces
-           while ((i = d->incomm.find_first_of ("\b") != std::string::npos))
+           while ((i = command.find_first_of ("\b") != std::string::npos))
              {
              if (i > 0) 
-               d->incomm.erase (i - 1, 2);  // delete character and one behind it
+               command.erase (i - 1, 2);  // delete character and one behind it
              else
-               d->incomm.erase (0, 1);  // line starts with backspace, get rid of it
+               command.erase (0, 1);  // line starts with backspace, get rid of it
              }
            
            // remove non printables from string
            std::string::iterator iter;
-           d->incomm.erase (remove_if (d->incomm.begin(), d->incomm.end(), is_unprintable()), d->incomm.end ());
+           command.erase (remove_if (command.begin(), command.end(), is_unprintable()), command.end ());
   
            // check not too long
-           if (d->incomm.size () > 254)
+           if (command.size () > 254)
              {
              write_to_descriptor( d, "Line too long.\r\n", 0 );
-             d->incomm.erase (); 
+             command.erase (); 
              break; 
              }
           
-           if (d->incomm.empty ())
-              d->incomm = " ";
+           if (command.empty ())
+              command = " ";
            else
              {
-             if (d->incomm != "!" && d->incomm != d->inlast)
+             if (command != "!" && command != d->inlast)
                 d->repeat = 0;  // they stopped repeating
              else
               if( ++d->repeat >= 20 )
@@ -1359,21 +1364,21 @@ void read_from_buffer( DESCRIPTOR_DATA * d )
                 write_to_descriptor( d,
                                      "\r\n*** PUT A LID ON IT!!! ***\r\nYou cannot enter the same command more than 20 consecutive times!\r\n",
                                      0 );
-                d->incomm = "quit";
+                command = "quit";
                }
              }  // if not empty
                         
           // ! repeats last command
           // if ! not entered, remember last command
-          if( d->incomm == "!")
-            d->incomm = d->inlast;
+          if( command == "!")
+            command = d->inlast;
           else
-            d->inlast = d->incomm;
-                
-           return;                     // may as well process command         
-             
-           }  // end of TELNET_NONE
-         
+            d->inlast = command;
+            
+          d->incomm.push_back (command);  // one more command to process
+          }  // end of TELNET_NONE
+          break;
+                   
         case TELNET_IAC:
           {
           unsigned char c =  d->inbuf [0];
