@@ -1365,6 +1365,7 @@ void read_from_buffer( DESCRIPTOR_DATA * d )
                                      "\r\n*** PUT A LID ON IT!!! ***\r\nYou cannot enter the same command more than 20 consecutive times!\r\n",
                                      0 );
                 command = "quit";
+                d->incomm.clear ();  // empty out pending commands
                }
              }  // if not empty
                         

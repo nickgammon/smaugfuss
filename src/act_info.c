@@ -1534,6 +1534,54 @@ void do_look( CHAR_DATA * ch, const char *argument )
       return;
    }
 
+   GUID guid;
+   number = sscanf(arg1, "<%Ld>", &guid );
+   
+   if (number == 1 && guid > 0)
+     {
+       
+     // show first extra description of matching item in inventory
+     for( obj = ch->first_carrying; obj; obj = obj->next_content )
+       if( can_see_obj( ch, obj ) && obj->guid == guid )
+         {
+          if (obj->pIndexData->first_extradesc)
+            pdesc = obj->pIndexData->first_extradesc->description;
+          if( !pdesc )
+            if (obj->first_extradesc)
+              pdesc = obj->first_extradesc->description;
+          if( !pdesc )
+             send_to_char( "You see nothing special.\r\n", ch );
+          else
+             send_to_char_color( pdesc, ch );
+          if( EXA_prog_trigger )
+             oprog_examine_trigger( ch, obj );
+  
+         return;          
+         }  // end of found it
+         
+     // show first extra description of matching item in room
+     for( obj = ch->in_room->first_content; obj; obj = obj->next_content )
+       if( can_see_obj( ch, obj ) && obj->guid == guid )
+         {
+          if (obj->pIndexData->first_extradesc)
+            pdesc = obj->pIndexData->first_extradesc->description;
+          if( !pdesc )
+            if (obj->first_extradesc)
+              pdesc = obj->first_extradesc->description;
+          if( !pdesc )
+             send_to_char( "You see nothing special.\r\n", ch );
+          else
+             send_to_char_color( pdesc, ch );
+          if( EXA_prog_trigger )
+             oprog_examine_trigger( ch, obj );
+  
+         return;          
+         }  // end of found it
+                  
+     send_to_char( "You do not see that here.\r\n", ch );
+     return;       
+     }  // end of GUID supplied
+        
 
    /*
     * finally fixed the annoying look 2.obj desc bug -Thoric 
@@ -5113,8 +5161,10 @@ void send_inroom_info ( CHAR_DATA* ch)
    snprintf(buf, sizeof (buf), 
              START_TELNET_SUBNEG         // IAC SB 102
              "inroom={"
+             "guid=\"%i\";"         // guid
              "blind=%s;"            // character blind?
              "dark=%s;",            // room dark?
+             ch->in_room->vnum,     // guid (vnum)
              TRUE_OR_FALSE (blind),
              TRUE_OR_FALSE (dark)
              );  

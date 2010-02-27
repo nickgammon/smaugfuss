@@ -4857,6 +4857,7 @@ AREA_DATA *get_area args( ( char *name ) );  /* FB */
 OD *get_objtype args( ( CHAR_DATA * ch, short type ) );
 void check_switches( bool possess );
 void check_switch( CHAR_DATA * ch, bool possess );
+void send_location ( CHAR_DATA * ch);
 
 /* interp.c */
 bool check_pos args( ( CHAR_DATA * ch, short position ) );

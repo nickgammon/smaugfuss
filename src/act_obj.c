@@ -122,7 +122,7 @@ void get_obj( CHAR_DATA * ch, OBJ_DATA * obj, OBJ_DATA * container )
 
    if( ch->carry_number + get_obj_number( obj ) > can_carry_n( ch ) )
    {
-      act( AT_PLAIN, "$d: you can't carry that many items.", ch, NULL, obj->short_descr, TO_CHAR );
+      act( AT_PLAIN, "$T: you can't carry that many items.", ch, NULL, obj->short_descr, TO_CHAR );
       return;
    }
 

@@ -1856,6 +1856,35 @@ void char_from_room( CHAR_DATA * ch )
    return;
 }
 
+void send_location ( CHAR_DATA * ch)
+  {
+    
+  if (WANT_TELNET_INFO (ch))
+    {     
+    char buf[MAX_STRING_LENGTH];
+    bool blind = !check_blind( ch );  // true is NOT blind
+    bool dark = !xIS_SET( ch->act, PLR_HOLYLIGHT ) && 
+               !IS_AFFECTED( ch, AFF_TRUESIGHT ) && 
+               !IS_AFFECTED( ch, AFF_INFRARED ) && 
+               room_is_dark( ch->in_room );
+    
+    snprintf(buf, sizeof (buf), 
+             START_TELNET_SUBNEG    // IAC SB 102
+             "move={"               // move table
+             "guid=\"%i\";"         // guid
+             "blind=%s;"            // character blind?
+             "dark=%s;}"            // room dark?
+             END_TELNET_SUBNEG,            // IAC SE
+             ch->in_room->vnum,     // guid (vnum)
+             TRUE_OR_FALSE (blind),
+             TRUE_OR_FALSE (dark)
+             );
+    
+    write_to_buffer (ch->desc, buf, 0);
+    } 
+    
+  } // end of send_location
+
 /*
  * Move a char into a room.
  */
@@ -1892,29 +1921,7 @@ void char_to_room( CHAR_DATA * ch, ROOM_INDEX_DATA * pRoomIndex )
    if( ( obj = get_eq_char( ch, WEAR_LIGHT ) ) != NULL && obj->item_type == ITEM_LIGHT && obj->value[2] != 0 )
       ++pRoomIndex->light;
 
-   if (WANT_TELNET_INFO (ch))
-     {     
-     char buf[MAX_STRING_LENGTH];
-     bool blind = !check_blind( ch );  // true is NOT blind
-     bool dark = !xIS_SET( ch->act, PLR_HOLYLIGHT ) && 
-                 !IS_AFFECTED( ch, AFF_TRUESIGHT ) && 
-                 !IS_AFFECTED( ch, AFF_INFRARED ) && 
-                 room_is_dark( ch->in_room );
-     
-     snprintf(buf, sizeof (buf), 
-               START_TELNET_SUBNEG    // IAC SB 102
-               "move={"               // move table
-               "guid=\"%i\";"         // guid
-               "blind=%s;"            // character blind?
-               "dark=%s;}"            // room dark?
-               END_TELNET_SUBNEG,            // IAC SE
-               ch->in_room->vnum,     // guid (vnum)
-               TRUE_OR_FALSE (blind),
-               TRUE_OR_FALSE (dark)
-               );
- 
-    write_to_buffer (ch->desc, buf, 0);
-   }
+   send_location (ch);
       
    /*
     * Add the room's affects to the char.

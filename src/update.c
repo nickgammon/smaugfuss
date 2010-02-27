@@ -2025,10 +2025,14 @@ void update_handler( void )
    pulse_look = 20;   // every 5 seconds or so
    
    // notify characters in every room in case fight changes stuff (eg. who is fighting what)
+   // and also where they are, just in case
    CHAR_DATA *gch; 
    for( gch = first_char; gch; gch = gch->next )
      if (!IS_NPC( gch ))
+       {
        send_inroom_info (gch);
+       send_location (gch);
+     }
    }
  
    if( --pulse_point <= 0 )
