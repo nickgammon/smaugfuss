@@ -5146,3 +5146,4 @@ extern std::map<GUID, CHAR_DATA *> guid_char_map;
 #define TELNET_SUBNEG_CODE 102   // NOTE: 102 is \x66 (below)
 #define START_TELNET_SUBNEG "\xFF\xFA\x66"   // IAC SB 102
 #define END_TELNET_SUBNEG   "\xFF\xF0"       // IA SE
+
