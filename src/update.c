@@ -20,6 +20,7 @@
 #include <string.h>
 #include "mud.h"
 #include "hint.h"
+#include "sha256.h"
 
 /*
  * Local functions.
@@ -2693,16 +2694,11 @@ char buf[MAX_STRING_LENGTH];
     if (nearbyRoom == NULL)
       for( pexit = d->character->in_room->first_exit; pexit; pexit = pexit->next )
        {
-       if (pexit->to_room == room)
+       if (pexit->to_room->vnum == guid)
          {
          nearbyRoom = room;
          break;  // found in adjacent room
          }  // end of exit room exists and is the correct room
-         
-        // if found in that room, don't check any more rooms
-        if (room == nearbyRoom)
-          break;
-            
        }  // end of for each exit
 
     if (nearbyRoom == NULL)
@@ -2718,6 +2714,8 @@ char buf[MAX_STRING_LENGTH];
           {
           if (pMob->pIndexData->pShop) 
             bShop = true;
+          if (xIS_SET( room->room_flags, ROOM_PET_SHOP ) )
+            bShop = true;
           if (pMob->pIndexData->rShop) 
             bRepair = true;
           if (xIS_SET( pMob->act, ACT_PRACTICE ) )
@@ -2729,6 +2727,8 @@ char buf[MAX_STRING_LENGTH];
             bHealer = true;
           }
       
+      char *hash = sha256_crypt( room->area->filename );
+      
       snprintf(buf, sizeof (buf), 
              "[\"%lld\"]={"     // guid (vnum)
              "name=%s;"
@@ -2738,6 +2738,7 @@ char buf[MAX_STRING_LENGTH];
              "repair=%s;"
              "healer=%s;"
              "terrain=%s;"
+             "area=\"%8.8s\";"
              "exits={",
              guid,
              fixup_lua_strings (room->name).c_str (),
@@ -2746,7 +2747,8 @@ char buf[MAX_STRING_LENGTH];
              TRUE_OR_FALSE (bTrainer),
              TRUE_OR_FALSE (bRepair),
              TRUE_OR_FALSE (bHealer),
-             fixup_lua_strings (sec_flags [room->sector_type]).c_str ()
+             fixup_lua_strings (sec_flags [room->sector_type]).c_str (),
+             hash   // hash of area filename
              
            );
          
@@ -2759,9 +2761,15 @@ char buf[MAX_STRING_LENGTH];
            // WARNING - I assume dir_name gives names that are valid Lua names (which it currently does)
            //  if not you would need to use fixup_lua_strings and do something like: "[%s]=%i;"
            snprintf(&buf [strlen (buf)], sizeof (buf) - strlen (buf), 
-             "%s=\"%i\";",          // n="12345"
+             "%s={"
+             "guid=\"%i\";"          // guid of room it goes to
+             "closed=%s;"            // closed?
+             "locked=%s;"            // locked?
+             "};",
              short_dir_name[pexit->vdir],
-             pexit->vnum
+             pexit->vnum,
+             TRUE_OR_FALSE (IS_SET( pexit->exit_info, EX_CLOSED)),
+             TRUE_OR_FALSE (IS_SET( pexit->exit_info, EX_LOCKED))
              );
           }
        }  // end for each exit        

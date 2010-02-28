@@ -1273,6 +1273,8 @@ void process_client_request ( DESCRIPTOR_DATA * d )
     d->char_info_wanted.push_back (guid);
   else if (sName == "room_info")
     d->room_info_wanted.push_back (guid);
+  else if (sName == "area_info")
+    d->area_info_wanted.push_back (guid);
     
   } // end of process_client_request
 

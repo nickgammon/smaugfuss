@@ -92,7 +92,7 @@ std::string fixup_lua_strings (const char * sce)
           break;   
         
         // Note: will not apply if UTF-8 encoding present
-        case '\xFF':  // IAC becomes \255
+        case (unsigned char) '\xFF':  // IAC becomes \255
           count += 3;  
           break;
         
@@ -133,7 +133,7 @@ std::string fixup_lua_strings (const char * sce)
         break;
       
       // Note: will not apply if UTF-8 encoding present
-      case '\xFF': // IAC
+      case (unsigned char) '\xFF': // IAC
         memcpy (pd, "\\255", 4);
         pd += 4;
         break;
